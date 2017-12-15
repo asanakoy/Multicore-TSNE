@@ -61,6 +61,7 @@ class MulticoreTSNE:
         self.n_iter = n_iter
         self.n_jobs = n_jobs
         self.random_state = -1 if random_state is None else random_state
+        self.metric = metric
         self.init = init
         self.embedding_ = None
         self.n_iter_ = None
@@ -75,7 +76,7 @@ class MulticoreTSNE:
 
         self.ffi = cffi.FFI()
         self.ffi.cdef(
-            """void tsne_run_double(double* X, int N, int D, double* Y,
+            """void tsne_run_double(char* metric, double* X, int N, int D, double* Y,
                                     int no_dims, double perplexity, double theta,
                                     int num_threads, int max_iter, int random_state,
                                     bool init_from_Y, int verbose,
@@ -87,7 +88,8 @@ class MulticoreTSNE:
             sofile = (glob(os.path.join(path, 'libtsne*.so')) +
                       glob(os.path.join(path, '*tsne*.dll')))[0]
             self.C = self.ffi.dlopen(os.path.join(path, sofile))
-        except (IndexError, OSError):
+        except (IndexError, OSError) as e:
+            print(e)
             raise RuntimeError('Cannot find/open tsne_multicore shared library')
 
     def fit(self, X, y=None):
@@ -113,8 +115,10 @@ class MulticoreTSNE:
         cffi_Y = self.ffi.cast('double*', Y.ctypes.data)
         final_error = np.array(0, dtype=float)
         cffi_final_error = self.ffi.cast('double*', final_error.ctypes.data)
+        cffi_metric = self.ffi.new('char[]', self.metric)
 
         t = FuncThread(self.C.tsne_run_double,
+                       cffi_metric,
                        cffi_X, N, D,
                        cffi_Y, self.n_components,
                        self.perplexity, self.angle, self.n_jobs, self.n_iter, self.random_state,

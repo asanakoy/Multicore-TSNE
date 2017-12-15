@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <queue>
 #include <limits>
+#include <math.h>
 
 
 #ifndef VPTREE_H
@@ -68,9 +69,49 @@ double euclidean_distance(const DataPoint &t1, const DataPoint &t2) {
     return sqrt(dd);
 }
 
+double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
+    /*
+        not normalized cosine distance (basically 1 - a.b)
+        both points a and b must be normalized to unit length beforehand
+    */
+    double dd = .0;
+    for (int d = 0; d < t1.dimensionality(); d++) {
+        dd += t1.x(d) * t2.x(d);
+    }
+    return 1 - dd;
+}
+
+double cosine_distance_normed(const DataPoint &t1, const DataPoint &t2) {
+    double dd = .0;
+    double norm_t1 = .0;
+    double norm_t2 = .0;
+    for (int d = 0; d < t1.dimensionality(); d++) {
+
+        norm_t1 += t1.x(d) * t1.x(d);
+        norm_t2 = t2.x(d) * t2.x(d);
+        dd += t1.x(d) * t2.x(d);
+    }
+    return 1 - dd / sqrt(norm_t1 * norm_t2);
+}
+
+
+template<typename T>
+class IVpTree
+{
+public:
+    // Destructor
+    virtual ~IVpTree() {}
+
+    // Function to create a new VpTree from data
+    virtual void create(const std::vector<T>& items) = 0;
+
+    // Function that uses the tree to find the k nearest neighbors of target
+    virtual void search(const T& target, int k, std::vector<T>* results, std::vector<double>* distances) = 0;
+};
+
 
 template<typename T, double (*distance)( const T&, const T& )>
-class VpTree
+class VpTree: public IVpTree<T>
 {
 public:
 
@@ -78,19 +119,19 @@ public:
     VpTree() : _root(0) {}
 
     // Destructor
-    ~VpTree() {
+    virtual ~VpTree() {
         delete _root;
     }
 
     // Function to create a new VpTree from data
-    void create(const std::vector<T>& items) {
+    virtual void create(const std::vector<T>& items) {
         delete _root;
         _items = items;
         _root = buildFromPoints(0, items.size());
     }
 
     // Function that uses the tree to find the k nearest neighbors of target
-    void search(const T& target, int k, std::vector<T>* results, std::vector<double>* distances)
+    virtual void search(const T& target, int k, std::vector<T>* results, std::vector<double>* distances)
     {
 
         // Use a priority queue to store intermediate results on

@@ -1,4 +1,6 @@
 *.gz
+*.pyc
 
 # cmake directories
 multicore_tsne/*/*
+.idea

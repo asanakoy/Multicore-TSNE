@@ -15,6 +15,7 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <stdexcept>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -34,12 +35,14 @@
 
 /*  
     Perform t-SNE
+        metric -- metric (euclidean or dot_product).
+            If "dot_product" used then each row of X must have norm 1.
         X -- double matrix of size [N, D]
         D -- input dimensionality
         Y -- array to fill with the result of size [N, no_dims]
         no_dims -- target dimentionality
 */
-void TSNE::run(double* X, int N, int D, double* Y,
+void TSNE::run(char* metric, double* X, int N, int D, double* Y,
                int no_dims = 2, double perplexity = 30, double theta = .5,
                int num_threads = 1, int max_iter = 1000, int random_state = 0,
                bool init_from_Y = false, int verbose = 0,
@@ -50,6 +53,11 @@ void TSNE::run(double* X, int N, int D, double* Y,
         perplexity = (N - 1) / 3;
         if (verbose)
             fprintf(stderr, "Perplexity too large for the number of data points! Adjusting ...\n");
+    }
+
+    std::string str_metric = std::string(metric);
+    if ((str_metric != "euclidean") && (str_metric != "dot_product")) {
+        throw std::invalid_argument(std::string("received invalid metric name:") + str_metric);
     }
 
 #ifdef _OPENMP
@@ -102,7 +110,7 @@ void TSNE::run(double* X, int N, int D, double* Y,
     int* row_P; int* col_P; double* val_P;
 
     // Compute asymmetric pairwise input similarities
-    computeGaussianPerplexity(X, N, D, &row_P, &col_P, &val_P, perplexity, (int) (3 * perplexity), verbose);
+    computeGaussianPerplexity(str_metric, X, N, D, &row_P, &col_P, &val_P, perplexity, (int) (3 * perplexity), verbose);
 
     // Symmetrize input similarities
     symmetrizeMatrix(&row_P, &col_P, &val_P, N);
@@ -318,7 +326,8 @@ double TSNE::evaluateError(int* row_P, int* col_P, double* val_P, double* Y, int
 }
 
 // Compute input similarities with a fixed perplexity using ball trees (this function allocates memory another function should free)
-void TSNE::computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P, double** _val_P, double perplexity, int K, int verbose) {
+void TSNE::computeGaussianPerplexity(std::string& metric, double* X, int N, int D, int** _row_P,
+                                    int** _col_P, double** _val_P, double perplexity, int K, int verbose) {
 
     if (perplexity > K) fprintf(stderr, "Perplexity should be lower than K!\n");
 
@@ -343,8 +352,17 @@ void TSNE::computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int*
         row_P[n + 1] = row_P[n] + K;
     }
 
+    if (verbose)
+        fprintf(stderr, "Using metric=%s!\n", metric.c_str());
     // Build ball tree on data set
-    VpTree<DataPoint, euclidean_distance>* tree = new VpTree<DataPoint, euclidean_distance>();
+    IVpTree<DataPoint>* tree = NULL;
+    if (metric == "euclidean") {
+        tree = new VpTree<DataPoint, euclidean_distance>();
+    } else {
+        // not normalized cosine distance (basically 1 - a.b)
+        // both points a and b must be normalized to unit length beforehand
+        tree = new VpTree<DataPoint, cosine_distance>();
+    }
     std::vector<DataPoint> obj_X(N, DataPoint(D, -1, X));
     for (int n = 0; n < N; n++) {
         obj_X[n] = DataPoint(D, n, X + n * D);
@@ -592,7 +610,7 @@ extern "C"
     #ifdef _WIN32
     __declspec(dllexport)
     #endif
-    extern void tsne_run_double(double* X, int N, int D, double* Y,
+    extern void tsne_run_double(char* metric, double* X, int N, int D, double* Y,
                                 int no_dims = 2, double perplexity = 30, double theta = .5,
                                 int num_threads = 1, int max_iter = 1000, int random_state = -1,
                                 bool init_from_Y = false, int verbose = 0,
@@ -602,7 +620,7 @@ extern "C"
         if (verbose)
             fprintf(stderr, "Performing t-SNE using %d cores.\n", NUM_THREADS(num_threads));
         TSNE tsne;
-        tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+        tsne.run(metric, X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                  init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
     }
 }
