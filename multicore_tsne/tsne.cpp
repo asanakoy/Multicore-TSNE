@@ -160,6 +160,7 @@ void TSNE::run(char* metric, double* X, int N, int D, double* Y,
         // Compute approximate gradient
         double error = computeGradient(row_P, col_P, val_P, Y, N, no_dims, dY, theta, need_eval_error);
 
+        // TODO: to fix some points we need to skip tupdating them here.
         for (int i = 0; i < N * no_dims; i++) {
             // Update gains
             gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8 + .01);

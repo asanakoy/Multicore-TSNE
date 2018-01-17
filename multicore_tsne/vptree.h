@@ -1,6 +1,7 @@
 /*
  *  vptree.h
  *  Implementation of a vantage-point tree.
+ *  Explanation of VP-tree https://fribbels.github.io/vptree/writeup
  *
  *  Created by Laurens van der Maaten.
  *  Copyright 2012, Delft University of Technology. All rights reserved.
@@ -70,6 +71,7 @@ double euclidean_distance(const DataPoint &t1, const DataPoint &t2) {
 }
 
 double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
+    // TODO: rename to cosine_distance_cheat
     /*
         not normalized cosine distance (basically 1 - a.b)
         both points a and b must be normalized to unit length beforehand
