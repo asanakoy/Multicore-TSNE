@@ -22,12 +22,22 @@ template <class treeT, double (*dist_fn)(const DataPoint&, const DataPoint&) >
 class TSNE
 {
 public:
+    /*  Run TNSE algorithm.
+
+        Arguments:
+            X - double matrix of size [N, D]
+            N - number of points
+            D - input dimensionality
+            Y - array of size [N, no_dims], to fill with the resultant embedding
+            no_dims - target dimensionality
+            should_normalize_input - make X zero mean and rescale values in each column to max_val=1?
+     */
     void run(double* X, int N, int D, double* Y,
                int no_dims = 2, double perplexity = 30, double theta = .5,
                int num_threads = 1, int max_iter = 1000, int random_state = 0,
                bool init_from_Y = false, int verbose = 0,
                double early_exaggeration = 12, double learning_rate = 200,
-               double *final_error = NULL);
+               double *final_error = NULL, bool should_normalize_input = true);
     void symmetrizeMatrix(int** row_P, int** col_P, double** val_P, int N);
 
 private:

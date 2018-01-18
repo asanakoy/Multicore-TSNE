@@ -34,9 +34,12 @@ class MulticoreTSNE:
     * min_grad_norm
     * metric
     * method
-    
-    When `cheat_metric` is true squared equclidean distance is used to build VPTree. 
-    Usually leads to same quality, yet much faster.
+
+    Args:
+    cheat_metric: if true squared equclidean distance is used to build VPTree.
+        Usually leads to the same quality, but much faster.
+    should_normalize_input: if true normalize input features to zero mean
+        and rescale values in each column to have max_value=1.
 
     Parameter `init` doesn't support 'pca' initialization, but a precomputed
     array can be passed.
@@ -55,9 +58,11 @@ class MulticoreTSNE:
                  random_state=None,
                  method='barnes_hut',
                  angle=0.5,
+                 should_normalize_input=True,
                  n_jobs=1):
         self.n_components = n_components
         self.angle = angle
+        self.should_normalize_input = should_normalize_input
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
         self.learning_rate = learning_rate
@@ -83,7 +88,8 @@ class MulticoreTSNE:
                                     int num_threads, int max_iter, int random_state,
                                     bool init_from_Y, int verbose,
                                     double early_exaggeration, double learning_rate,
-                                    double *final_error, char* metric);""")
+                                    double *final_error, char* metric,
+                                    bool should_normalize_input);""")
 
         path = os.path.dirname(os.path.realpath(__file__))
         try:
@@ -124,7 +130,7 @@ class MulticoreTSNE:
                        cffi_Y, self.n_components,
                        self.perplexity, self.angle, self.n_jobs, self.n_iter, self.random_state,
                        init_from_Y, self.verbose, self.early_exaggeration, self.learning_rate,
-                       cffi_final_error, cffi_metric)
+                       cffi_final_error, cffi_metric, self.should_normalize_input)
         t.daemon = True
         t.start()
 

@@ -51,7 +51,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                int num_threads, int max_iter, int random_state,
                bool init_from_Y, int verbose,
                double early_exaggeration, double learning_rate,
-               double *final_error) {
+               double *final_error, bool should_normalize_input) {
 
     if (N - 1 < 3 * perplexity) {
         perplexity = (N - 1) / 3;
@@ -96,13 +96,15 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         fprintf(stderr, "Computing input similarities...\n");
 
     start = time(0);
-    zeroMean(X, N, D);
-    double max_X = .0;
-    for (int i = 0; i < N * D; i++) {
-        if (X[i] > max_X) max_X = X[i];
-    }
-    for (int i = 0; i < N * D; i++) {
-        X[i] /= max_X;
+    if (should_normalize_input) {
+        zeroMean(X, N, D);
+        double max_X = .0;
+        for (int i = 0; i < N * D; i++) {
+            if (X[i] > max_X) max_X = X[i];
+        }
+        for (int i = 0; i < N * D; i++) {
+            X[i] /= max_X;
+        }
     }
 
     // Compute input similarities
@@ -613,7 +615,8 @@ extern "C"
                                 int num_threads = 1, int max_iter = 1000, int random_state = -1,
                                 bool init_from_Y = false, int verbose = 0,
                                 double early_exaggeration = 12, double learning_rate = 200,
-                                double *final_error = NULL, const char* metric = "sqeuclidean") {
+                                double *final_error = NULL, const char* metric = "sqeuclidean",
+                                bool should_normalize_input = true) {
 
         if (verbose)
             fprintf(stderr, "Performing t-SNE using %d cores.\n", NUM_THREADS(num_threads));
@@ -631,28 +634,27 @@ extern "C"
         if (str_metric == "euclidean") {
             TSNE<SplitTree, euclidean_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
         } else if (str_metric == "sqeuclidean") {
             TSNE<SplitTree, euclidean_distance_squared> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
         } else if (str_metric == "cosine_distance") {
-                    TSNE<SplitTree, cosine_distance> tsne;
-                    tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                             init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
-
+            TSNE<SplitTree, cosine_distance> tsne;
+            tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
         } else if (str_metric == "cosine_distance_prenormed") {
             TSNE<SplitTree, cosine_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
         } else if (str_metric == "angular_distance") {
             TSNE<SplitTree, angular_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
         } else if (str_metric == "angular_distance_prenormed") {
             TSNE<SplitTree, angular_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
         }
     }
 }
