@@ -159,9 +159,12 @@ double angular_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
     May be used with VPTree without problems.
 */
 double angular_distance(const DataPoint &t1, const DataPoint &t2) {
-
     double dd = .0;
+    double norm_t1 = .0;
+    double norm_t2 = .0;
     for (int d = 0; d < t1.dimensionality(); d++) {
+        norm_t1 += t1.x(d) * t1.x(d);
+        norm_t2 = t2.x(d) * t2.x(d);
         dd += t1.x(d) * t2.x(d);
     }
     return acos(dd / sqrt(norm_t1 * norm_t2));
