@@ -622,7 +622,9 @@ extern "C"
         std::string str_metric = std::string(metric);
         if ((str_metric != "euclidean") && (str_metric != "sqeuclidean")
             && (str_metric != "cosine_distance")
-            && (str_metric != "cosine_distance_prenormed")) {
+            && (str_metric != "cosine_distance_prenormed")
+            && (str_metric != "angular_distance")
+            && (str_metric != "angular_distance_prenormed")) {
             throw std::invalid_argument(std::string("received invalid metric name:") + str_metric);
         }
 
@@ -641,6 +643,14 @@ extern "C"
 
         } else if (str_metric == "cosine_distance_prenormed") {
             TSNE<SplitTree, cosine_distance_prenormed> tsne;
+            tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+        } else if (str_metric == "angular_distance") {
+            TSNE<SplitTree, angular_distance> tsne;
+            tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+        } else if (str_metric == "angular_distance_prenormed") {
+            TSNE<SplitTree, angular_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
         }

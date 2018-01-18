@@ -86,6 +86,10 @@ inline double euclidean_distance(const DataPoint &t1, const DataPoint &t2) {
       cosine_distance(); for points t1 and t2 with unit norm
 
     Returns cosine distance value in range [0, 2].
+
+    NOTE: not a real distance metric and triangular inequality
+    and identity of indiscernibles don't hold.
+    VPTree is not guaranteed to work properly with this distance function.
 */
 double cosine_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
 
@@ -99,6 +103,10 @@ double cosine_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
 
 /*
     Returns cosine distance value in range [0, 2].
+
+    NOTE: not a real distance metric and triangular inequality
+    and identity of indiscernibles don't hold.
+    VPTree is not guaranteed to work properly with this distance function.
 */
 double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
     double dd = .0;
@@ -111,6 +119,52 @@ double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
         dd += t1.x(d) * t2.x(d);
     }
     return 1 - dd / sqrt(norm_t1 * norm_t2);
+}
+
+
+/*
+    Returns angle distance value in range [0, Pi] radians.
+
+    Equivalent to the calculating minimal angle between 2 vectors.
+
+    It is the client's responsibility to normalized both points t1 and t2 to unit length beforehand.
+
+    This method is equivalent to:
+      angular_distance(); for points t1 and t2 with unit norm
+
+
+    NOTE: is not a real distance metric because identity of indiscernibles doesn't hold.
+    But triangular inequality holds.
+    It is a pseudometric since it gives distance of 0 for any vectors in the same direction.
+    May be used with VPTree without problems.
+*/
+double angular_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
+
+    double dd = .0;
+    for (int d = 0; d < t1.dimensionality(); d++) {
+        dd += t1.x(d) * t2.x(d);
+    }
+    return acos(dd);
+}
+
+
+/*
+    Returns angle distance value in range [0, Pi] radians.
+
+    Equivalent to the calculating minimal angle between 2 vectors.
+
+    NOTE: is not a real distance metric because identity of indiscernibles doesn't hold.
+    But triangular inequality holds.
+    It is a pseudometric since it gives distance of 0 for any vectors in the same direction.
+    May be used with VPTree without problems.
+*/
+double angular_distance(const DataPoint &t1, const DataPoint &t2) {
+
+    double dd = .0;
+    for (int d = 0; d < t1.dimensionality(); d++) {
+        dd += t1.x(d) * t2.x(d);
+    }
+    return acos(dd / sqrt(norm_t1 * norm_t2));
 }
 
 
