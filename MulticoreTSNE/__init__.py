@@ -25,14 +25,13 @@ class FuncThread(threading.Thread):
 class MulticoreTSNE:
     """
     Compute t-SNE embedding using Barnes-Hut optimization and
-    multiple cores (if avaialble).
+    multiple cores (if available).
 
     Parameters mostly correspond to parameters of `sklearn.manifold.TSNE`.
 
     The following parameters are unused:
     * n_iter_without_progress
     * min_grad_norm
-    * metric
     * method
 
     Args:
@@ -75,6 +74,7 @@ class MulticoreTSNE:
         self.n_iter_ = None
         self.kl_divergence_ = None
         self.verbose = int(verbose)
+        assert method == 'barnes_hut', 'Only Barnes-Hut method is allowed'
         assert isinstance(init, np.ndarray) or init == 'random', "init must be 'random' or array"
         if isinstance(init, np.ndarray):
             assert init.ndim == 2, "init array must be 2D"

@@ -36,15 +36,6 @@
 #endif
 
 
-/*  
-    Perform t-SNE
-        metric -- metric (euclidean or dot_product).
-            If "dot_product" used then each row of X must have norm 1.
-        X -- double matrix of size [N, D]
-        D -- input dimensionality
-        Y -- array to fill with the result of size [N, no_dims]
-        no_dims -- target dimentionality
-*/
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                int no_dims, double perplexity, double theta ,
@@ -85,6 +76,11 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     // Allocate some memory
     double* dY    = (double*) malloc(N * no_dims * sizeof(double));
     double* uY    = (double*) calloc(N * no_dims , sizeof(double));
+    // The learning rate η is initially set to 100 and it is updated after every
+    // iteration by means of the adaptive learning rate scheme described by
+    // Jacobs (1988)." The Jacobs paper is: R.A. Jacobs
+    // The idea is to have parameter-dependent learning rates.
+    // gains contain the parameter-dependent learning rate corrections.
     double* gains = (double*) malloc(N * no_dims * sizeof(double));
     if (dY == NULL || uY == NULL || gains == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
     for (int i = 0; i < N * no_dims; i++) {
@@ -106,7 +102,6 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
             X[i] /= max_X;
         }
     }
-
     // Compute input similarities
     int* row_P; int* col_P; double* val_P;
 
@@ -161,9 +156,12 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         // Compute approximate gradient
         double error = computeGradient(row_P, col_P, val_P, Y, N, no_dims, dY, theta, need_eval_error);
 
-        // TODO: to fix some points we need to skip tupdating them here.
+        // TODO: to fix some points we need to skip updating them here.
         for (int i = 0; i < N * no_dims; i++) {
             // Update gains
+            // If the sign of the gradient w.r.t. a parameter doesn't change,
+            // we slowly increase the learning rate for that parameter.
+            // If the sign switches, we rapidly reduce the learning rate for that parameter.
             gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8 + .01);
 
             // Perform gradient update (with momentum and gains)
@@ -216,7 +214,10 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         fprintf(stderr, "Fitting performed in %4.2f seconds.\n", total_time);
 }
 
-// Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
+/* Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
+
+
+ */
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 double TSNE<treeT, dist_fn>::
 computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
@@ -330,8 +331,20 @@ double TSNE<treeT, dist_fn>::evaluateError(int* row_P, int* col_P, double* val_P
     return C;
 }
 
-// Compute input similarities with a fixed perplexity using ball trees (this function allocates memory another function should free)
-template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
+/*  Compute input similarities with a fixed perplexity using ball trees (this function allocates memory another function should free)
+
+    Arguments:
+        X - double matrix of size [N, D], points in the original space,
+        N - number of input points
+        D - input dimensionality
+        _row_P - pointer, used to output results
+        _col_P - pointer, used to output results
+        _val_P - pointer, used to output results
+        perplexity - perplexity value, a measure for information equal to 2**(Shannon entropy).
+        K - number of nearest neighbors to consider for each point
+        verbose - verbosity level
+ */
+template <class treeT, double (*dist_fn)(const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::
 computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
                           double** _val_P, double perplexity, int K, int verbose) {
@@ -345,9 +358,9 @@ computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
     if (*_row_P == NULL || *_col_P == NULL || *_val_P == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
 
     /*
-        row_P -- offsets for `col_P` (i)
-        col_P -- K nearest neighbors indices (j)
-        val_P -- p_{i | j}
+        row_P -- int array of size N,  offsets for `col_P` (i). (0, K, 2K, ... NK)
+        col_P -- int array of size N * K, stores indices (j) of the K nearest neighbors for each point
+        val_P -- values of pairwise similarities between points, p_{i | j}
     */
 
     int* row_P = *_row_P;
@@ -391,8 +404,9 @@ computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
         double max_beta =  DBL_MAX;
         double tol = 1e-5;
 
-        // Iterate until we found a good perplexity
-        int iter = 0; double sum_P;
+        // Iterate until we found a good perplexity using binary search
+        int iter = 0;
+        double sum_P = DBL_MIN;
         while (!found && iter < 200) {
 
             // Compute Gaussian kernel row
@@ -401,15 +415,17 @@ computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
             }
 
             // Compute entropy of current row
-            sum_P = DBL_MIN;
+            sum_P = DBL_MIN; // close to zero
             for (int m = 0; m < K; m++) {
                 sum_P += cur_P[m];
             }
+
+            // p_{ij} = cur_P[j] / sum_P
             double H = .0;
             for (int m = 0; m < K; m++) {
                 H += beta * (distances[m + 1] * cur_P[m]);
             }
-            H = (H / sum_P) + log(sum_P);
+            H = (H / sum_P) + log(sum_P); // = sum_j p_{ij} log(p_{ij})
 
             // Evaluate whether the entropy is within the tolerance level
             double Hdiff = H - log(perplexity);
@@ -610,6 +626,13 @@ extern "C"
     #ifdef _WIN32
     __declspec(dllexport)
     #endif
+    /*
+        Arguments:
+            metric - one of "euclidean", "sqeuclidean", "cosine_distance",
+                "cosine_distance_prenormed", "angular_distance", "angular_distance_prenormed".
+                If "cosine_distance_prenormed" or "angular_distance_prenormed" is used
+                then each row of X must have norm 1.
+     */
     extern void tsne_run_double(double* X, int N, int D, double* Y,
                                 int no_dims = 2, double perplexity = 30, double theta = .5,
                                 int num_threads = 1, int max_iter = 1000, int random_state = -1,
@@ -620,7 +643,6 @@ extern "C"
 
         if (verbose)
             fprintf(stderr, "Performing t-SNE using %d cores.\n", NUM_THREADS(num_threads));
-
 
         std::string str_metric = std::string(metric);
         if ((str_metric != "euclidean") && (str_metric != "sqeuclidean")

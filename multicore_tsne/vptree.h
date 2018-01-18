@@ -26,22 +26,30 @@
 
 class DataPoint
 {
-    int _D;
-    int _ind;
+    int _D; // number of dimensions
+    int _ind; // index of the point
 
 public:
+    // Pointer to the array with coordinates of the point
+    // Object doesn't own the pointer. It will newer release the memory.
     double* _x;
+
     DataPoint() {
         _D = 1;
         _ind = -1;
         _x = NULL;
     }
+
+    // Create a DataPoint
     DataPoint(int D, int ind, double* x) {
         _D = D;
         _ind = ind;
         _x = x;
     }
-    DataPoint(const DataPoint& other) {                     // this makes a deep copy -- should not free anything
+
+    // Shallow copy of the point
+    // Do not free anything
+    DataPoint(const DataPoint& other) {
         if (this != &other) {
             _D = other.dimensionality();
             _ind = other.index();
@@ -49,7 +57,8 @@ public:
         }
     }
 
-    DataPoint& operator= (const DataPoint& other) {         // asignment should free old object
+    // Shallow copy of the point
+    DataPoint& operator= (const DataPoint& other) {
         if (this != &other) {
             _D = other.dimensionality();
             _ind = other.index();
@@ -92,7 +101,6 @@ inline double euclidean_distance(const DataPoint &t1, const DataPoint &t2) {
     VPTree is not guaranteed to work properly with this distance function.
 */
 double cosine_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
-
     double dd = .0;
     for (int d = 0; d < t1.dimensionality(); d++) {
         dd += t1.x(d) * t2.x(d);
@@ -113,7 +121,6 @@ double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
     double norm_t1 = .0;
     double norm_t2 = .0;
     for (int d = 0; d < t1.dimensionality(); d++) {
-
         norm_t1 += t1.x(d) * t1.x(d);
         norm_t2 = t2.x(d) * t2.x(d);
         dd += t1.x(d) * t2.x(d);
@@ -139,7 +146,6 @@ double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
     May be used with VPTree without problems.
 */
 double angular_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
-
     double dd = .0;
     for (int d = 0; d < t1.dimensionality(); d++) {
         dd += t1.x(d) * t2.x(d);
