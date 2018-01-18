@@ -6,6 +6,8 @@
  *  Copyright 2012, Delft University of Technology. All rights reserved.
  *
  *  Multicore version by Dmitry Ulyanov, 2016. dmitry.ulyanov.msu@gmail.com
+ *
+ *  Fork by Artsiom Sanakoyeu, 2018. enorone@gmail.com
  */
 
 #include <cstdlib>

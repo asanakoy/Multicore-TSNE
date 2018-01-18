@@ -1,3 +1,7 @@
+/*
+ *  Fork by Artsiom Sanakoyeu, 2018. enorone@gmail.com
+ */
+
 #include <cmath>
 #include <cfloat>
 #include <cstdlib>

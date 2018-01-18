@@ -55,8 +55,7 @@ class MulticoreTSNE:
                  random_state=None,
                  method='barnes_hut',
                  angle=0.5,
-                 n_jobs=1,
-                 cheat_metric=True):
+                 n_jobs=1):
         self.n_components = n_components
         self.angle = angle
         self.perplexity = perplexity
@@ -65,12 +64,12 @@ class MulticoreTSNE:
         self.n_iter = n_iter
         self.n_jobs = n_jobs
         self.random_state = -1 if random_state is None else random_state
+        self.metric = metric
         self.init = init
         self.embedding_ = None
         self.n_iter_ = None
         self.kl_divergence_ = None
         self.verbose = int(verbose)
-        self.cheat_metric = cheat_metric
         assert isinstance(init, np.ndarray) or init == 'random', "init must be 'random' or array"
         if isinstance(init, np.ndarray):
             assert init.ndim == 2, "init array must be 2D"
@@ -84,14 +83,15 @@ class MulticoreTSNE:
                                     int num_threads, int max_iter, int random_state,
                                     bool init_from_Y, int verbose,
                                     double early_exaggeration, double learning_rate,
-                                    double *final_error, int distance);""")
+                                    double *final_error, char* metric);""")
 
         path = os.path.dirname(os.path.realpath(__file__))
         try:
             sofile = (glob(os.path.join(path, 'libtsne*.so')) +
                       glob(os.path.join(path, '*tsne*.dll')))[0]
             self.C = self.ffi.dlopen(os.path.join(path, sofile))
-        except (IndexError, OSError):
+        except (IndexError, OSError) as e:
+            print(e)
             raise RuntimeError('Cannot find/open tsne_multicore shared library')
 
     def fit(self, X, y=None):
@@ -117,13 +117,14 @@ class MulticoreTSNE:
         cffi_Y = self.ffi.cast('double*', Y.ctypes.data)
         final_error = np.array(0, dtype=float)
         cffi_final_error = self.ffi.cast('double*', final_error.ctypes.data)
+        cffi_metric = self.ffi.new('char[]', self.metric)
 
         t = FuncThread(self.C.tsne_run_double,
                        cffi_X, N, D,
                        cffi_Y, self.n_components,
                        self.perplexity, self.angle, self.n_jobs, self.n_iter, self.random_state,
                        init_from_Y, self.verbose, self.early_exaggeration, self.learning_rate,
-                       cffi_final_error, int(self.cheat_metric))
+                       cffi_final_error, cffi_metric)
         t.daemon = True
         t.start()
 

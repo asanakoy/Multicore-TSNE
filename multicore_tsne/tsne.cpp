@@ -6,6 +6,8 @@
  *  Copyright 2012, Delft University of Technology. All rights reserved.
  *
  *  Multicore version by Dmitry Ulyanov, 2016. dmitry.ulyanov.msu@gmail.com
+ *
+ *  Fork by Artsiom Sanakoyeu, 2018. enorone@gmail.com
  */
 
 #include <cmath>
@@ -15,6 +17,7 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <stdexcept>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -35,6 +38,8 @@
 
 /*  
     Perform t-SNE
+        metric -- metric (euclidean or dot_product).
+            If "dot_product" used then each row of X must have norm 1.
         X -- double matrix of size [N, D]
         D -- input dimensionality
         Y -- array to fill with the result of size [N, no_dims]
@@ -154,6 +159,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         // Compute approximate gradient
         double error = computeGradient(row_P, col_P, val_P, Y, N, no_dims, dY, theta, need_eval_error);
 
+        // TODO: to fix some points we need to skip tupdating them here.
         for (int i = 0; i < N * no_dims; i++) {
             // Update gains
             gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8 + .01);
@@ -210,7 +216,9 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 
 // Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
-double TSNE<treeT, dist_fn>::computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P, double* Y, int N, int no_dims, double* dC, double theta, bool eval_error)
+double TSNE<treeT, dist_fn>::
+computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
+                double* Y, int N, int no_dims, double* dC, double theta, bool eval_error)
 {
     // Construct quadtree on current map
     treeT* tree = new treeT(Y, N, no_dims);
@@ -323,7 +331,9 @@ double TSNE<treeT, dist_fn>::evaluateError(int* row_P, int* col_P, double* val_P
 
 // Compute input similarities with a fixed perplexity using ball trees (this function allocates memory another function should free)
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
-void TSNE<treeT, dist_fn>::computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P, double** _val_P, double perplexity, int K, int verbose) {
+void TSNE<treeT, dist_fn>::
+computeGaussianPerplexity(double* X, int N, int D, int** _row_P,
+                          int** _col_P, double** _val_P, double perplexity, int K, int verbose) {
 
     if (perplexity > K) fprintf(stderr, "Perplexity should be lower than K!\n");
 
@@ -604,17 +614,33 @@ extern "C"
                                 int num_threads = 1, int max_iter = 1000, int random_state = -1,
                                 bool init_from_Y = false, int verbose = 0,
                                 double early_exaggeration = 12, double learning_rate = 200,
-                                double *final_error = NULL, int distance = 1)
-    {
+                                double *final_error = NULL, char* metric) {
+
         if (verbose)
             fprintf(stderr, "Performing t-SNE using %d cores.\n", NUM_THREADS(num_threads));
-        if (distance == 0) {
+
+        std::string str_metric = std::string(metric);
+        if ((str_metric != "euclidean") && (str_metric != "sqeuclidean")
+            && (str_metric != "cosine_distance")
+            && (str_metric != "cosine_distance_prenormed")) {
+            throw std::invalid_argument(std::string("received invalid metric name:") + str_metric);
+        }
+
+        if (str_metric == "euclidean") {
             TSNE<SplitTree, euclidean_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
-        }
-        else {
+        } else if (str_metric == "sqeuclidean") {
             TSNE<SplitTree, euclidean_distance_squared> tsne;
+            tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+        } else if (str_metric == "cosine_distance") {
+                    TSNE<SplitTree, cosine_distance> tsne;
+                    tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                             init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
+
+        } else if (str_metric == "cosine_distance_prenormed") {
+            TSNE<SplitTree, cosine_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, verbose, early_exaggeration, learning_rate, final_error);
         }

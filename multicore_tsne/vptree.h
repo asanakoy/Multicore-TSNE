@@ -1,11 +1,14 @@
 /*
  *  vptree.h
  *  Implementation of a vantage-point tree.
+ *  Explanation of VP-tree https://fribbels.github.io/vptree/writeup
  *
  *  Created by Laurens van der Maaten.
  *  Copyright 2012, Delft University of Technology. All rights reserved.
  *
  *  Multicore version by Dmitry Ulyanov, 2016. dmitry.ulyanov.msu@gmail.com
+ *
+ *  Fork by Artsiom Sanakoyeu, 2018. enorone@gmail.com
  */
 
 
@@ -15,6 +18,7 @@
 #include <cstdio>
 #include <queue>
 #include <limits>
+#include <math.h>
 
 
 #ifndef VPTREE_H
@@ -68,20 +72,57 @@ double euclidean_distance_squared(const DataPoint &t1, const DataPoint &t2) {
     return dd;
 }
 
+
 inline double euclidean_distance(const DataPoint &t1, const DataPoint &t2) {
     return sqrt(euclidean_distance_squared(t1, t2));
 }
 
 
-template<typename T, double (*distance)( const DataPoint&, const DataPoint&)>
-class VpTree
+/*
+    Not normalized cosine distance (basically 1 - a.b)
+    It is the client's responsibility to normalized both points a and b to unit length beforehand.
+
+    This method is equivalent to:
+      cosine_distance(); for points t1 and t2 with unit norm
+
+    Returns cosine distance value in range [0, 2].
+*/
+double cosine_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
+
+    double dd = .0;
+    for (int d = 0; d < t1.dimensionality(); d++) {
+        dd += t1.x(d) * t2.x(d);
+    }
+    return 1 - dd;
+}
+
+
+/*
+    Returns cosine distance value in range [0, 2].
+*/
+double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
+    double dd = .0;
+    double norm_t1 = .0;
+    double norm_t2 = .0;
+    for (int d = 0; d < t1.dimensionality(); d++) {
+
+        norm_t1 += t1.x(d) * t1.x(d);
+        norm_t2 = t2.x(d) * t2.x(d);
+        dd += t1.x(d) * t2.x(d);
+    }
+    return 1 - dd / sqrt(norm_t1 * norm_t2);
+}
+
+
+template<typename T, double (*distance)( const T&, const T& )>
+class VpTree:
 {
 public:
     // Default constructor
     VpTree() : _root(0) {}
 
     // Destructor
-    ~VpTree() {
+    virtual ~VpTree() {
         delete _root;
     }
 
