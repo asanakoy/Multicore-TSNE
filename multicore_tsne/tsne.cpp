@@ -218,8 +218,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 double TSNE<treeT, dist_fn>::
 computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
-                double* Y, int N, int no_dims, double* dC, double theta, bool eval_error)
-{
+                double* Y, int N, int no_dims, double* dC, double theta, bool eval_error) {
     // Construct quadtree on current map
     treeT* tree = new treeT(Y, N, no_dims);
     
@@ -332,8 +331,8 @@ double TSNE<treeT, dist_fn>::evaluateError(int* row_P, int* col_P, double* val_P
 // Compute input similarities with a fixed perplexity using ball trees (this function allocates memory another function should free)
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::
-computeGaussianPerplexity(double* X, int N, int D, int** _row_P,
-                          int** _col_P, double** _val_P, double perplexity, int K, int verbose) {
+computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
+                          double** _val_P, double perplexity, int K, int verbose) {
 
     if (perplexity > K) fprintf(stderr, "Perplexity should be lower than K!\n");
 
@@ -614,10 +613,11 @@ extern "C"
                                 int num_threads = 1, int max_iter = 1000, int random_state = -1,
                                 bool init_from_Y = false, int verbose = 0,
                                 double early_exaggeration = 12, double learning_rate = 200,
-                                double *final_error = NULL, char* metric) {
+                                double *final_error = NULL, const char* metric = "sqeuclidean") {
 
         if (verbose)
             fprintf(stderr, "Performing t-SNE using %d cores.\n", NUM_THREADS(num_threads));
+
 
         std::string str_metric = std::string(metric);
         if ((str_metric != "euclidean") && (str_metric != "sqeuclidean")

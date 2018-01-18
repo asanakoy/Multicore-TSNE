@@ -31,10 +31,11 @@ public:
     void symmetrizeMatrix(int** row_P, int** col_P, double** val_P, int N);
 
 private:
+    // Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
     double computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta, bool eval_error);
     double evaluateError(int* row_P, int* col_P, double* val_P, double* Y, int N, int no_dims, double theta);
     void zeroMean(double* X, int N, int D);
-    void computeGaussianPerplexity(std::string& metric, double* X, int N, int D, int** _row_P, int** _col_P, double** _val_P, double perplexity, int K, int verbose);
+    void computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P, double** _val_P, double perplexity, int K, int verbose);
     double randn();
 };
 

@@ -115,7 +115,7 @@ double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
 
 
 template<typename T, double (*distance)( const T&, const T& )>
-class VpTree:
+class VpTree
 {
 public:
     // Default constructor
