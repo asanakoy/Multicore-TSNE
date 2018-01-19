@@ -82,13 +82,27 @@ if args.n_objects != -1:
     mnist = mnist[:args.n_objects]
     classes = classes[:args.n_objects]
 
-tsne = TSNE(n_jobs=int(args.n_jobs), verbose=1, n_components=args.n_components, random_state=660)
+import sklearn.preprocessing
+mnist = sklearn.preprocessing.normalize(mnist, norm='l2', axis=1, copy=False)
 
-time1 = time.time()
-mnist_tsne = tsne.fit_transform(mnist)
-time2 = time.time()
-print 'Elapsed time: %0.3f ms' % ((time2 - time1) * 1000.0)
+elapsed = dict()
+for metric in ['euclidean', 'sqeuclidean',
+               'cosine', 'cosine_prenormed',
+               'angular', 'angular_prenormed'
+               ]:
+    tsne = TSNE(n_jobs=int(args.n_jobs), verbose=1, n_components=args.n_components,
+                metric=metric, random_state=660, perplexity=30, should_normalize_input=False)
 
-filename = 'mnist_tsne_n_comp=%d.png' % args.n_components
-plot(mnist_tsne, classes, filename)
-print('Plot saved to %s' % filename)
+    time1 = time.time()
+    mnist_tsne = tsne.fit_transform(mnist)
+    time2 = time.time()
+    print 'metric {}. Elapsed time: {:0.3f} ms'.format(metric, (time2 - time1) * 1000.0)
+    elapsed[metric] = (time2 - time1) * 1000.0
+
+    filename = 'mnist_tsne_n_comp=%d_metric=%s.png' % (args.n_components, metric)
+    plot(mnist_tsne, classes, filename)
+    print('Plot saved to %s' % filename)
+
+print '---\n\n'
+for metric, t in elapsed.iteritems():
+    print 'metric {} - time: {:0.3f} ms'.format(metric, t)
