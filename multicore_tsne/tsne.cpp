@@ -628,8 +628,10 @@ extern "C"
     #endif
     /*
         Arguments:
-            metric - one of "euclidean", "sqeuclidean", "cosine_distance",
-                "cosine_distance_prenormed", "angular_distance", "angular_distance_prenormed".
+            metric - one of:
+                "euclidean", "sqeuclidean",
+                "cosine", "cosine_prenormed",
+                "angular", "angular_prenormed".
                 If "cosine_distance_prenormed" or "angular_distance_prenormed" is used
                 then each row of X must have norm 1.
      */
@@ -646,10 +648,8 @@ extern "C"
 
         std::string str_metric = std::string(metric);
         if ((str_metric != "euclidean") && (str_metric != "sqeuclidean")
-            && (str_metric != "cosine_distance")
-            && (str_metric != "cosine_distance_prenormed")
-            && (str_metric != "angular_distance")
-            && (str_metric != "angular_distance_prenormed")) {
+            && (str_metric != "cosine") && (str_metric != "cosine_prenormed")
+            && (str_metric != "angular") && (str_metric != "angular_prenormed")) {
             throw std::invalid_argument(std::string("received invalid metric name:") + str_metric);
         }
 
@@ -661,19 +661,19 @@ extern "C"
             TSNE<SplitTree, euclidean_distance_squared> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
-        } else if (str_metric == "cosine_distance") {
+        } else if (str_metric == "cosine") {
             TSNE<SplitTree, cosine_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
-        } else if (str_metric == "cosine_distance_prenormed") {
+        } else if (str_metric == "cosine_prenormed") {
             TSNE<SplitTree, cosine_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
-        } else if (str_metric == "angular_distance") {
+        } else if (str_metric == "angular") {
             TSNE<SplitTree, angular_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
-        } else if (str_metric == "angular_distance_prenormed") {
+        } else if (str_metric == "angular_prenormed") {
             TSNE<SplitTree, angular_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
