@@ -158,7 +158,8 @@ double angular_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
         dd = std::max(-1.0, std::min(dd, 1.0));
     } else {
         char buffer [50];
-        printf(buffer, "Vectors are not unit-normalized. t1.t2=%f", dd);
+        printf("Vectors are not unit-normalized. t1.t2=%f\n", dd);
+        sprintf(buffer, "Vectors are not unit-normalized. t1.t2=%f", dd);
         throw std::invalid_argument(buffer);
     }
     return acos(dd);
