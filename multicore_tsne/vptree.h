@@ -19,6 +19,8 @@
 #include <queue>
 #include <limits>
 #include <math.h>
+#include <cassert>
+#include <stdexcept>
 
 
 #ifndef VPTREE_H
@@ -122,10 +124,10 @@ double cosine_distance(const DataPoint &t1, const DataPoint &t2) {
     double norm_t2 = .0;
     for (int d = 0; d < t1.dimensionality(); d++) {
         norm_t1 += t1.x(d) * t1.x(d);
-        norm_t2 = t2.x(d) * t2.x(d);
+        norm_t2 += t2.x(d) * t2.x(d);
         dd += t1.x(d) * t2.x(d);
     }
-    return 1 - dd / sqrt(norm_t1 * norm_t2);
+    return 1 - dd / sqrt(norm_t1 * norm_t2 + DBL_MIN);
 }
 
 
@@ -150,6 +152,15 @@ double angular_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
     for (int d = 0; d < t1.dimensionality(); d++) {
         dd += t1.x(d) * t2.x(d);
     }
+
+    double eps = 1e-8;
+    if ((-1.0 - eps <= dd) && (dd <= 1.0 + eps)){
+        dd = std::max(-1.0, std::min(dd, 1.0));
+    } else {
+        char buffer [50];
+        printf(buffer, "Vectors are not unit-normalized. t1.t2=%f", dd);
+        throw std::invalid_argument(buffer);
+    }
     return acos(dd);
 }
 
@@ -170,10 +181,10 @@ double angular_distance(const DataPoint &t1, const DataPoint &t2) {
     double norm_t2 = .0;
     for (int d = 0; d < t1.dimensionality(); d++) {
         norm_t1 += t1.x(d) * t1.x(d);
-        norm_t2 = t2.x(d) * t2.x(d);
+        norm_t2 += t2.x(d) * t2.x(d);
         dd += t1.x(d) * t2.x(d);
     }
-    return acos(dd / sqrt(norm_t1 * norm_t2));
+    return acos(dd / sqrt(norm_t1 * norm_t2 + DBL_MIN));
 }
 
 
