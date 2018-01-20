@@ -153,7 +153,7 @@ double angular_distance_prenormed(const DataPoint &t1, const DataPoint &t2) {
         dd += t1.x(d) * t2.x(d);
     }
 
-    double eps = 1e-8;
+    double eps = 1e-5;
     if ((-1.0 - eps <= dd) && (dd <= 1.0 + eps)){
         dd = std::max(-1.0, std::min(dd, 1.0));
     } else {
