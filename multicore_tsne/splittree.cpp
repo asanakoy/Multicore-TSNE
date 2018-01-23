@@ -108,7 +108,7 @@ SplitTree::~SplitTree()
 
 // Insert a point into the SplitTree
 bool SplitTree::insert(int new_index)
-{   
+{
     // Ignore objects which do not belong in this quad tree
     double* point = data + new_index * QT_NO_DIMS;
     if (!boundary.containsPoint(point)) {
@@ -154,7 +154,12 @@ bool SplitTree::insert(int new_index)
             return true;
         }
     }
-    
+
+    // FIXME: check why this is happening and fix it.
+    // https://github.com/DmitryUlyanov/Multicore-TSNE/issues/38
+    // FIXME: It must be possible to add any point (lying in the tree bounds) in the tree.
+    // It might be numerical issue in the check boundary.containsPoint(point)
+
     // Otherwise, the point cannot be inserted (this should never happen)
     printf("%s\n", "No no, this should not happen");
     return false;
