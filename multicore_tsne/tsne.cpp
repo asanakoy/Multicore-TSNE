@@ -40,7 +40,7 @@ template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                int no_dims, double perplexity, double theta ,
                int num_threads, int max_iter, int random_state,
-               bool init_from_Y, int verbose,
+               bool init_from_Y, bool* is_frozen_Y, int verbose,
                double early_exaggeration, double learning_rate,
                double *final_error, bool should_normalize_input) {
 
@@ -134,11 +134,26 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         val_P[i] *= early_exaggeration;
     }
 
+    bool nothing_frozen = true; // has at least one frozen point
+    if (is_frozen_Y != NULL) {
+        for (int i = 0; i < N; ++i) {
+            if (is_frozen_Y[i]) {
+                nothing_frozen = false;
+                break;
+            }
+        }
+    }
+
     // Initialize solution (randomly), unless Y is already initialized
     if (init_from_Y) {
-        stop_lying_iter = 0;  // Immediately stop lying. Passed Y is close to the true solution.
-    }
-    else {
+        if (nothing_frozen) {
+            // Immediately stop lying if nothing is frozen.
+            // Passed Y is close to the true solution.
+            stop_lying_iter = 0;
+        } else {
+            // do iteration with early exaggeration
+        }
+    } else {
         if (random_state != -1) {
             srand(random_state);
         }
@@ -156,8 +171,14 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         // Compute approximate gradient
         double error = computeGradient(row_P, col_P, val_P, Y, N, no_dims, dY, theta, need_eval_error);
 
-        // TODO: to fix some points we need to skip updating them here.
         for (int i = 0; i < N * no_dims; i++) {
+            if (!nothing_frozen) {
+                // to freeze some points we need to skip updating them here.
+                int point_idx = i / no_dims;
+                if (is_frozen_Y[point_idx]) {
+                    continue;
+                }
+            }
             // Update gains
             // If the sign of the gradient w.r.t. a parameter doesn't change,
             // we slowly increase the learning rate for that parameter.
@@ -637,11 +658,19 @@ extern "C"
                 then each row of X must have norm 1.
      */
     extern void tsne_run_double(double* X, int N, int D, double* Y,
-                                int no_dims = 2, double perplexity = 30, double theta = .5,
-                                int num_threads = 1, int max_iter = 1000, int random_state = -1,
-                                bool init_from_Y = false, int verbose = 0,
-                                double early_exaggeration = 12, double learning_rate = 200,
-                                double *final_error = NULL, const char* metric = "sqeuclidean",
+                                int no_dims = 2,
+                                double perplexity = 30,
+                                double theta = .5,
+                                int num_threads = 1,
+                                int max_iter = 1000,
+                                int random_state = -1,
+                                bool init_from_Y = false,
+                                bool* is_frozen_Y = NULL,
+                                int verbose = 0,
+                                double early_exaggeration = 12,
+                                double learning_rate = 200,
+                                double *final_error = NULL,
+                                const char* metric = "sqeuclidean",
                                 bool should_normalize_input = true) {
 
         if (verbose)
@@ -657,27 +686,33 @@ extern "C"
         if (str_metric == "euclidean") {
             TSNE<SplitTree, euclidean_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
         } else if (str_metric == "sqeuclidean") {
             TSNE<SplitTree, euclidean_distance_squared> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
         } else if (str_metric == "cosine") {
             TSNE<SplitTree, cosine_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
         } else if (str_metric == "cosine_prenormed") {
             TSNE<SplitTree, cosine_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
         } else if (str_metric == "angular") {
             TSNE<SplitTree, angular_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
         } else if (str_metric == "angular_prenormed") {
             TSNE<SplitTree, angular_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, verbose, early_exaggeration, learning_rate, final_error, should_normalize_input);
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
         }
     }
 }
