@@ -167,7 +167,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 
             // Perform gradient update (with momentum and gains)
             uY[i] = momentum * uY[i] - eta * gains[i] * dY[i];
-            Y[i] = Y[i] + uY[i];
+            Y[i] += uY[i];
         }
 
         // Make solution zero-mean
