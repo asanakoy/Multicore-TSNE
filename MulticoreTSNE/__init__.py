@@ -143,8 +143,11 @@ class MulticoreTSNE:
         cffi_final_error = self.ffi.cast('double*', final_error.ctypes.data)
         cffi_metric = self.ffi.new('char[]', self.metric)
 
-        is_frozen_Y = self.is_frozen_init.copy('C')
-        cffi_is_frozen_Y = self.ffi.cast('bool*', is_frozen_Y.ctypes.data)
+        if self.is_frozen_init is not None:
+            is_frozen_Y = self.is_frozen_init.copy('C')
+            cffi_is_frozen_Y = self.ffi.cast('bool*', is_frozen_Y.ctypes.data)
+        else:
+            cffi_is_frozen_Y = 0
 
         t = FuncThread(self.C.tsne_run_double,
                        cffi_X, N, D,
