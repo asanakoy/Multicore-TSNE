@@ -147,7 +147,7 @@ class MulticoreTSNE:
             is_frozen_Y = self.is_frozen_init.copy('C')
             cffi_is_frozen_Y = self.ffi.cast('bool*', is_frozen_Y.ctypes.data)
         else:
-            cffi_is_frozen_Y = 0
+            cffi_is_frozen_Y = self.ffi.cast('bool*', 0)
 
         t = FuncThread(self.C.tsne_run_double,
                        cffi_X, N, D,
