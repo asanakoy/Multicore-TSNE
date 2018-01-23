@@ -162,6 +162,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
             // If the sign of the gradient w.r.t. a parameter doesn't change,
             // we slowly increase the learning rate for that parameter.
             // If the sign switches, we rapidly reduce the learning rate for that parameter.
+            // TODO: do not store array of gains and uY. Single variable is enough.
             gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8 + .01);
 
             // Perform gradient update (with momentum and gains)
@@ -581,7 +582,7 @@ void TSNE<treeT, dist_fn>::symmetrizeMatrix(int** _row_P, int** _col_P, double**
 }
 
 
-// Makes data zero-mean
+// Makes data zero-mean per dimension (axis=0)
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::zeroMean(double* X, int N, int D) {
 
@@ -607,7 +608,7 @@ void TSNE<treeT, dist_fn>::zeroMean(double* X, int N, int D) {
 }
 
 
-// Generates a Gaussian random number
+// Generates a standard Gaussian random number using Box–Muller transform
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 double TSNE<treeT, dist_fn>::randn() {
     double x, radius;
