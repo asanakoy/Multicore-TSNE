@@ -188,6 +188,43 @@ double angular_distance(const DataPoint &t1, const DataPoint &t2) {
     return acos(dd / sqrt(norm_t1 * norm_t2 + DBL_MIN));
 }
 
+// consider angular distance * time distance (last dimension)
+double angular_time_distance(const DataPoint &t1, const DataPoint &t2) {
+    double dd = .0;
+    double norm_t1 = .0;
+    double norm_t2 = .0;
+    for (int d = 0; d < t1.dimensionality() - 1; d++) {
+        norm_t1 += t1.x(d) * t1.x(d);
+        norm_t2 += t2.x(d) * t2.x(d);
+        dd += t1.x(d) * t2.x(d);
+    }
+    double angular_dist = acos(dd / sqrt(norm_t1 * norm_t2 + DBL_MIN));
+    double time_dist = max(1.0, fabs(t1.x(t1.dimensionality() - 1) - t2.x(t2.dimensionality() - 1)) - 10);
+    return angular_dist * time_dist;
+}
+
+// consider prenormed angular distance * time distance (last dimension)
+double angular_distance_time_prenormed(const DataPoint &t1, const DataPoint &t2) {
+    double dd = .0;
+    for (int d = 0; d < t1.dimensionality() - 1; d++) {
+        dd += t1.x(d) * t2.x(d);
+    }
+
+    double eps = 1e-5;
+    if ((-1.0 - eps <= dd) && (dd <= 1.0 + eps)){
+        dd = std::max(-1.0, std::min(dd, 1.0));
+    } else {
+        char buffer [50];
+        printf("Vectors are not unit-normalized. t1.t2=%f\n", dd);
+        sprintf(buffer, "Vectors are not unit-normalized. t1.t2=%f", dd);
+        throw std::invalid_argument(buffer);
+    }
+
+    double angular_dist = acos(dd);
+    double time_dist = max(1.0, fabs(t1.x(t1.dimensionality() - 1) - t2.x(t2.dimensionality() - 1) - 5));
+    return angular_dist * time_dist;
+}
+
 
 template<typename T, double (*distance)( const T&, const T& )>
 class VpTree

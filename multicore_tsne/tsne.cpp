@@ -146,7 +146,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 
     // Initialize solution (randomly), unless Y is already initialized
     if (init_from_Y) {
-        if (nothing_frozen) {
+        if (is_frozen_Y != NULL) {
             // Immediately stop lying if nothing is frozen.
             // Passed Y is close to the true solution.
             stop_lying_iter = 0;
@@ -679,7 +679,8 @@ extern "C"
         std::string str_metric = std::string(metric);
         if ((str_metric != "euclidean") && (str_metric != "sqeuclidean")
             && (str_metric != "cosine") && (str_metric != "cosine_prenormed")
-            && (str_metric != "angular") && (str_metric != "angular_prenormed")) {
+            && (str_metric != "angular") && (str_metric != "angular_prenormed")
+            && (str_metric != "angular_time_prenormed")) {
             throw std::invalid_argument(std::string("received invalid metric name:") + str_metric);
         }
 
@@ -713,6 +714,11 @@ extern "C"
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
+        } else if (str_metric == "angular_time_prenormed") {
+                    TSNE<SplitTree, angular_distance_time_prenormed> tsne;
+                    tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                             init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                             final_error, should_normalize_input);
         }
     }
 }
