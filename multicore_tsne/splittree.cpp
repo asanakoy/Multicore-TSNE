@@ -161,7 +161,7 @@ bool SplitTree::insert(int new_index)
     // It might be numerical issue in the check boundary.containsPoint(point)
 
     // Otherwise, the point cannot be inserted (this should never happen)
-    printf("%s\n", "No no, this should not happen");
+//    printf("%s\n", "No no, this should not happen");
     return false;
 }
 
