@@ -91,8 +91,8 @@ class MulticoreTSNE:
                     raise ValueError('is_frozen_init must be a boolean np.array '
                                      'with the same number of elements as in init, '
                                      '{} != {}'.format(len(is_frozen_init), len(init)))
-            else:
-                raise ValueError('is_frozen_init must be a boolean np.array '
+            elif is_frozen_init is not None:
+                raise ValueError('is_frozen_init must be None or a boolean np.array'
                                  'when init != "random"')
         elif init != 'random':
             raise ValueError('init must be "random" or np.array')
