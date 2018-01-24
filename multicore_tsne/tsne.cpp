@@ -281,7 +281,7 @@ computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
                 C += inp_val_P[i] * log((inp_val_P[i] + FLT_MIN) / ((1.0 / (1.0 + D)) + FLT_MIN));
             }
 
-            D = inp_val_P[i] / (1.0 + D);
+            D = inp_val_P[i] / (1.0 + D); // p_{ij}*q_{ij}*Z
             // Sum positive force
             for (int d = 0; d < no_dims; d++) {
                 pos_f[ind1 + d] += D * (Y[ind1 + d] - Y[ind2 + d]);
