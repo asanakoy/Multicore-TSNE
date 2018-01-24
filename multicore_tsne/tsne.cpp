@@ -718,6 +718,8 @@ extern "C"
             const int margin = 10;
             const int slope = 2;
             const int max_time_distance = 25;
+            printf("Using margin=%i, slope=%i, max_time_distance=%i\n",
+                    margin, slope, max_time_distance);
             TSNE<SplitTree, angular_distance_time_prenormed<margin, slope, max_time_distance> > tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
