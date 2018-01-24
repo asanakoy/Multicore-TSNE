@@ -89,7 +89,8 @@ class MulticoreTSNE:
             if isinstance(is_frozen_init, np.ndarray) and is_frozen_init.dtype == 'bool':
                 if len(is_frozen_init) != len(init):
                     raise ValueError('is_frozen_init must be a boolean np.array '
-                                     'with the same number of elements as in init')
+                                     'with the same number of elements as in init, '
+                                     '{} != {}'.format(len(is_frozen_init), len(init)))
             else:
                 raise ValueError('is_frozen_init must be a boolean np.array '
                                  'when init != "random"')
