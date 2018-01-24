@@ -204,6 +204,7 @@ double angular_time_distance(const DataPoint &t1, const DataPoint &t2) {
 }
 
 // consider prenormed angular distance * time distance (last dimension)
+template<int margin, int slope, int max_time_distance>
 double angular_distance_time_prenormed(const DataPoint &t1, const DataPoint &t2) {
     double dd = .0;
     for (int d = 0; d < t1.dimensionality() - 1; d++) {
@@ -219,9 +220,9 @@ double angular_distance_time_prenormed(const DataPoint &t1, const DataPoint &t2)
         sprintf(buffer, "Vectors are not unit-normalized. t1.t2=%f", dd);
         throw std::invalid_argument(buffer);
     }
-
     double angular_dist = acos(dd);
-    double time_dist = max(1.0, fabs(t1.x(t1.dimensionality() - 1) - t2.x(t2.dimensionality() - 1) - 5));
+    double time_dist = max(1.0, (fabs(t1.x(t1.dimensionality() - 1) - t2.x(t2.dimensionality() - 1)) - margin) / slope);
+    time_dist = min(max_time_distance, time_dist);
     return angular_dist * time_dist;
 }
 

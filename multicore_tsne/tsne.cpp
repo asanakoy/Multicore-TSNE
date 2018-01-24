@@ -715,10 +715,13 @@ extern "C"
                      init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "angular_time_prenormed") {
-                    TSNE<SplitTree, angular_distance_time_prenormed> tsne;
-                    tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                             init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
-                             final_error, should_normalize_input);
+            const int margin = 10;
+            const int slope = 2;
+            const int max_time_distance = 25;
+            TSNE<SplitTree, angular_distance_time_prenormed<margin, slope, max_time_distance> > tsne;
+            tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
         }
     }
 }
