@@ -226,6 +226,29 @@ double angular_distance_time_prenormed(const DataPoint &t1, const DataPoint &t2)
     return angular_dist * time_dist;
 }
 
+// consider prenormed angular distance, thresholding it
+double angular_threshold_prenormed_distance(const DataPoint &t1, const DataPoint &t2) {
+    double dd = .0;
+    for (int d = 0; d < t1.dimensionality(); d++) {
+        dd += t1.x(d) * t2.x(d);
+    }
+
+    double eps = 1e-5;
+    if ((-1.0 - eps <= dd) && (dd <= 1.0 + eps)){
+        dd = std::max(-1.0, std::min(dd, 1.0));
+    } else {
+        char buffer [50];
+        printf("Vectors are not unit-normalized. t1.t2=%f\n", dd);
+        sprintf(buffer, "Vectors are not unit-normalized. t1.t2=%f", dd);
+        throw std::invalid_argument(buffer);
+    }
+    double angular_dist = acos(dd);
+    if (angular_dist > 0.877 && angular_dist < 2.2) {
+        angular_dist = 2.2;
+    }
+    return angular_dist;
+}
+
 
 template<typename T, double (*distance)( const T&, const T& )>
 class VpTree

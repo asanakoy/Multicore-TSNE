@@ -680,7 +680,8 @@ extern "C"
         if ((str_metric != "euclidean") && (str_metric != "sqeuclidean")
             && (str_metric != "cosine") && (str_metric != "cosine_prenormed")
             && (str_metric != "angular") && (str_metric != "angular_prenormed")
-            && (str_metric != "angular_time_prenormed")) {
+            && (str_metric != "angular_time_prenormed")
+            && (str_metric != "angular_threshold_prenormed")) {
             throw std::invalid_argument(std::string("received invalid metric name:") + str_metric);
         }
 
@@ -715,12 +716,17 @@ extern "C"
                      init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "angular_time_prenormed") {
-            const int margin = 10;
-            const int slope = 2;
-            const int max_time_distance = 25;
+            const int margin = 20;
+            const int slope = 100;
+            const int max_time_distance = 3;
             printf("Using margin=%i, slope=%i, max_time_distance=%i\n",
                     margin, slope, max_time_distance);
             TSNE<SplitTree, angular_distance_time_prenormed<margin, slope, max_time_distance> > tsne;
+            tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
+        } else if (str_metric == "angular_threshold_prenormed") {
+             TSNE<SplitTree, angular_threshold_prenormed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
