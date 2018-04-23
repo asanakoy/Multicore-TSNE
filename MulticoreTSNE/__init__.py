@@ -127,6 +127,11 @@ class MulticoreTSNE:
 
         assert X.ndim == 2, 'X should be 2D array.'
 
+        if self.metric.endswith('_prenormed') and not self.metric.endswith('time_prenormed'):
+            norms = (X**2).sum(axis=1)
+            if not np.allclose(norms, 1.0):
+                raise ValueError('each row of X must have norm 1')
+
         # X may be modified, make a copy
         X = np.array(X, dtype=float, order='C', copy=True)
 
