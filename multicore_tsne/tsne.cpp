@@ -35,7 +35,7 @@
     #define NUM_THREADS(N) (1)
 #endif
 
-
+ // WARNING: No early exaggeration will be made if is_frozen_Y != NULL
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                int no_dims, double perplexity, double theta ,
@@ -172,6 +172,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         double error = computeGradient(row_P, col_P, val_P, Y, N, no_dims, dY, theta, need_eval_error);
 
         for (int i = 0; i < N * no_dims; i++) {
+            // TODO: implement lower learning rate (lr_mult <= 1.0) for some points instead of freezing
             if (!nothing_frozen) {
                 // to freeze some points we need to skip updating them here.
                 int point_idx = i / no_dims;
@@ -183,7 +184,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
             // If the sign of the gradient w.r.t. a parameter doesn't change,
             // we slowly increase the learning rate for that parameter.
             // If the sign switches, we rapidly reduce the learning rate for that parameter.
-            // TODO: do not store array of gains and uY. Single variable is enough.
+            // gains[i] is the learning rate multiplier for point #i.
             gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8 + .01);
 
             // Perform gradient update (with momentum and gains)
