@@ -354,7 +354,10 @@ double TSNE<treeT, dist_fn>::evaluateError(int* offset_P, int* nns_P, double* va
     return C;
 }
 
-/*  Compute input similarities with a fixed perplexity using ball trees (this function allocates memory another function should free)
+/*  Compute input similarities with a fixed perplexity using ball trees
+   (this function allocates memory another function should free).
+
+   Creates a sparse matrix with results using pointers _offset_P, _nns_P, _val_P.
 
     Arguments:
         X - double matrix of size [N, D], points in the original space,
@@ -529,7 +532,7 @@ computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P
 }
 
 
-/*  Symmetrize the matrix P_{j|i} and get P_{ij}
+/*  Symmetrize a sparse matrix P_{j|i} and get P_{ij}
 
     Arguments:
         _offset_P - pointer, to offsets for `_nns_P`; will be modified in-place
