@@ -1,6 +1,6 @@
 /*
  *  tsne.cpp
- *  Implementation of both standard and Barnes-Hut-SNE.
+ *  Implementation of Barnes-Hut-SNE.
  *
  *  Created by Laurens van der Maaten.
  *  Copyright 2012, Delft University of Technology. All rights reserved.
@@ -83,7 +83,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     // gains contain the parameter-dependent learning rate corrections.
     double* gains = (double*) malloc(N * no_dims * sizeof(double));
     if (dY == NULL || uY == NULL || gains == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
-    for (int i = 0; i < N * no_dims; i++) {
+    for (int i = 0; i < N * no_dims; ++i) {
         gains[i] = 1.0;
     }
 
@@ -95,32 +95,32 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     if (should_normalize_input) {
         zeroMean(X, N, D);
         double max_X = .0;
-        for (int i = 0; i < N * D; i++) {
+        for (int i = 0; i < N * D; ++i) {
             if (X[i] > max_X) max_X = X[i];
         }
-        for (int i = 0; i < N * D; i++) {
+        for (int i = 0; i < N * D; ++i) {
             X[i] /= max_X;
         }
     }
     // Compute input similarities
-    int* row_P; int* col_P; double* val_P;
-
+    int* offset_P; int* nns_P; double* val_P;
     // Compute asymmetric pairwise input similarities
-    computeGaussianPerplexity(X, N, D, &row_P, &col_P, &val_P, perplexity, (int) (3 * perplexity), verbose);
+    computeGaussianPerplexity(X, N, D, &offset_P, &nns_P, &val_P, perplexity, (int) (3 * perplexity), verbose);
 
     // Symmetrize input similarities
-    symmetrizeMatrix(&row_P, &col_P, &val_P, N);
+    symmetrizeMatrix(&offset_P, &nns_P, &val_P, N);
+    // Renormalize probabilities to have sum = 1.
     double sum_P = .0;
-    for (int i = 0; i < row_P[N]; i++) {
+    for (int i = 0; i < offset_P[N]; ++i) {
         sum_P += val_P[i];
     }
-    for (int i = 0; i < row_P[N]; i++) {
+    for (int i = 0; i < offset_P[N]; ++i) {
         val_P[i] /= sum_P;
     }
 
     end = time(0);
     if (verbose)
-        fprintf(stderr, "Done in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", (float)(end - start) , (double) row_P[N] / ((double) N * (double) N));
+        fprintf(stderr, "Done in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", (float)(end - start) , (double) offset_P[N] / ((double) N * (double) N));
 
     /* 
         ======================
@@ -130,7 +130,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 
 
     // Lie about the P-values
-    for (int i = 0; i < row_P[N]; i++) {
+    for (int i = 0; i < offset_P[N]; ++i) {
         val_P[i] *= early_exaggeration;
     }
 
@@ -157,7 +157,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         if (random_state != -1) {
             srand(random_state);
         }
-        for (int i = 0; i < N * no_dims; i++) {
+        for (int i = 0; i < N * no_dims; ++i) {
             Y[i] = randn();
         }
     }
@@ -169,9 +169,9 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         bool need_eval_error = (verbose && ((iter > 0 && iter % 50 == 0) || (iter == max_iter - 1)));
 
         // Compute approximate gradient
-        double error = computeGradient(row_P, col_P, val_P, Y, N, no_dims, dY, theta, need_eval_error);
+        double error = computeGradient(offset_P, nns_P, val_P, Y, N, no_dims, dY, theta, need_eval_error);
 
-        for (int i = 0; i < N * no_dims; i++) {
+        for (int i = 0; i < N * no_dims; ++i) {
             // TODO: implement lower learning rate (lr_mult <= 1.0) for some points instead of freezing
             if (!nothing_frozen) {
                 // to freeze some points we need to skip updating them here.
@@ -197,7 +197,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 
         // Stop lying about the P-values after a while, and switch momentum
         if (iter == stop_lying_iter) {
-            for (int i = 0; i < row_P[N]; i++) {
+            for (int i = 0; i < offset_P[N]; ++i) {
                 val_P[i] /= early_exaggeration;
             }
         }
@@ -222,15 +222,15 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     end = time(0); total_time += (float) (end - start) ;
 
     if (final_error != NULL)
-        *final_error = evaluateError(row_P, col_P, val_P, Y, N, no_dims, theta);
+        *final_error = evaluateError(offset_P, nns_P, val_P, Y, N, no_dims, theta);
 
     // Clean up memory
     free(dY);
     free(uY);
     free(gains);
 
-    free(row_P); row_P = NULL;
-    free(col_P); col_P = NULL;
+    free(offset_P); offset_P = NULL;
+    free(nns_P); nns_P = NULL;
     free(val_P); val_P = NULL;
 
     if (verbose)
@@ -243,7 +243,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
  */
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 double TSNE<treeT, dist_fn>::
-computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
+computeGradient(int* inp_row_P, int* inp_nns_P, double* inp_val_P,
                 double* Y, int N, int no_dims, double* dC, double theta, bool eval_error) {
     // Construct quadtree on current map
     treeT* tree = new treeT(Y, N, no_dims);
@@ -263,15 +263,15 @@ computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
 #ifdef _OPENMP
     #pragma omp parallel for reduction(+:P_i_sum,C)
 #endif
-    for (int n = 0; n < N; n++) {
+    for (int n = 0; n < N; ++n) {
         // Edge forces
         int ind1 = n * no_dims;
-        for (int i = inp_row_P[n]; i < inp_row_P[n + 1]; i++) {
+        for (int i = inp_row_P[n]; i < inp_row_P[n + 1]; ++i) {
 
             // Compute pairwise distance and Q-value
             double D = .0;
-            int ind2 = inp_col_P[i] * no_dims;
-            for (int d = 0; d < no_dims; d++) {
+            int ind2 = inp_nns_P[i] * no_dims;
+            for (int d = 0; d < no_dims; ++d) {
                 double t = Y[ind1 + d] - Y[ind2 + d];
                 D += t * t;
             }
@@ -284,7 +284,7 @@ computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
 
             D = inp_val_P[i] / (1.0 + D); // p_{ij}*q_{ij}*Z
             // Sum positive force
-            for (int d = 0; d < no_dims; d++) {
+            for (int d = 0; d < no_dims; ++d) {
                 pos_f[ind1 + d] += D * (Y[ind1 + d] - Y[ind2 + d]);
             }
         }
@@ -296,12 +296,12 @@ computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
     }
     
     double sum_Q = 0.;
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < N; ++i) {
         sum_Q += Q[i];
     }
 
     // Compute final t-SNE gradient
-    for (int i = 0; i < N * no_dims; i++) {
+    for (int i = 0; i < N * no_dims; ++i) {
         dC[i] = pos_f[i] - (neg_f[i] / sum_Q);
     }
 
@@ -318,7 +318,7 @@ computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P,
 
 // Evaluate t-SNE cost function (approximately)
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
-double TSNE<treeT, dist_fn>::evaluateError(int* row_P, int* col_P, double* val_P, double* Y, int N, int no_dims, double theta)
+double TSNE<treeT, dist_fn>::evaluateError(int* offset_P, int* nns_P, double* val_P, double* Y, int N, int no_dims, double theta)
 {
 
     // Get estimate of normalization term
@@ -326,7 +326,7 @@ double TSNE<treeT, dist_fn>::evaluateError(int* row_P, int* col_P, double* val_P
 
     double* buff = new double[no_dims]();
     double sum_Q = .0;
-    for (int n = 0; n < N; n++) {
+    for (int n = 0; n < N; ++n) {
         tree->computeNonEdgeForces(n, theta, buff, &sum_Q);
     }
     delete tree;
@@ -337,12 +337,12 @@ double TSNE<treeT, dist_fn>::evaluateError(int* row_P, int* col_P, double* val_P
 #ifdef _OPENMP
     #pragma omp parallel for reduction(+:C)
 #endif
-    for (int n = 0; n < N; n++) {
+    for (int n = 0; n < N; ++n) {
         int ind1 = n * no_dims;
-        for (int i = row_P[n]; i < row_P[n + 1]; i++) {
+        for (int i = offset_P[n]; i < offset_P[n + 1]; ++i) {
             double Q = .0;
-            int ind2 = col_P[i] * no_dims;
-            for (int d = 0; d < no_dims; d++) {
+            int ind2 = nns_P[i] * no_dims;
+            for (int d = 0; d < no_dims; ++d) {
                 double b  = Y[ind1 + d] - Y[ind2 + d];
                 Q += b * b;
             }
@@ -360,45 +360,48 @@ double TSNE<treeT, dist_fn>::evaluateError(int* row_P, int* col_P, double* val_P
         X - double matrix of size [N, D], points in the original space,
         N - number of input points
         D - input dimensionality
-        _row_P - pointer, used to output results
-        _col_P - pointer, used to output results
-        _val_P - pointer, used to output results
+        _offset_P - pointer, used to output offsets for `_nns_P`
+        _nns_P - pointer, used to output indices (j) of the K nearest neighbors for each point
+        _val_P - pointer, used to output  values of pairwise similarities between points, p_{j | i};
+                 (*_val_P)[offset_P[i] + k] will be the similarity of the k-th nearest neighbor
+                 of point i (0 <= k < K) and point i.
         perplexity - perplexity value, a measure for information equal to 2**(Shannon entropy).
         K - number of nearest neighbors to consider for each point
         verbose - verbosity level
  */
 template <class treeT, double (*dist_fn)(const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::
-computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
+computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P,
                           double** _val_P, double perplexity, int K, int verbose) {
 
     if (perplexity > K) fprintf(stderr, "Perplexity should be lower than K!\n");
 
     // Allocate the memory we need
-    *_row_P = (int*)    malloc((N + 1) * sizeof(int));
-    *_col_P = (int*)    calloc(N * K, sizeof(int));
+    *_offset_P = (int*)    malloc((N + 1) * sizeof(int));
+    *_nns_P = (int*)    calloc(N * K, sizeof(int));
     *_val_P = (double*) calloc(N * K, sizeof(double));
-    if (*_row_P == NULL || *_col_P == NULL || *_val_P == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
+    if (*_offset_P == NULL || *_nns_P == NULL || *_val_P == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
 
     /*
-        row_P -- int array of size N,  offsets for `col_P` (i). (0, K, 2K, ... NK)
-        col_P -- int array of size N * K, stores indices (j) of the K nearest neighbors for each point
-        val_P -- values of pairwise similarities between points, p_{i | j}
+        offset_P -- int array of size N,  offsets for `nns_P` (i). (0, K, 2K, ... NK)
+        nns_P -- int array of size N * K, stores indices (j) of the K nearest neighbors for each point;
+            nns_P[offset_P[i] + k] - is the index of the k-th nearest neighbor for point i (0 <= k < K).
+        val_P -- values of pairwise similarities between points, p_{j | i};
+             val_P[offset_P[i] + k] - is the similarity of the k-th nearest neighbor of point i (0 <= k < K) and point i.
     */
-
-    int* row_P = *_row_P;
-    int* col_P = *_col_P;
+    int* offset_P = *_offset_P;
+    int* nns_P = *_nns_P;
     double* val_P = *_val_P;
 
-    row_P[0] = 0;
-    for (int n = 0; n < N; n++) {
-        row_P[n + 1] = row_P[n] + K;
+    offset_P[0] = 0;
+    for (int n = 0; n < N; ++n) {
+        offset_P[n + 1] = offset_P[n] + K;
     }
 
     // Build ball tree on data set
     VpTree<DataPoint, dist_fn>* tree = new VpTree<DataPoint, dist_fn>();
     std::vector<DataPoint> obj_X(N, DataPoint(D, -1, X));
-    for (int n = 0; n < N; n++) {
+    for (int n = 0; n < N; ++n) {
         obj_X[n] = DataPoint(D, n, X + n * D);
     }
     tree->create(obj_X);
@@ -411,14 +414,15 @@ computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
 #ifdef _OPENMP
     #pragma omp parallel for
 #endif
-    for (int n = 0; n < N; n++)
+    for (int i = 0; i < N; ++i)
     {
-        std::vector<double> cur_P(K);
+        std::vector<double> cur_sim(K);
         std::vector<DataPoint> indices;
         std::vector<double> distances;
 
-        // Find nearest neighbors
-        tree->search(obj_X[n], K + 1, &indices, &distances);
+        // Find nearest neighbors.
+        // First retrieved will be obj_X[i] itself.
+        tree->search(obj_X[i], K + 1, &indices, &distances);
 
         // Initialize some variables for binary search
         bool found = false;
@@ -429,26 +433,45 @@ computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
 
         // Iterate until we found a good perplexity using binary search
         int iter = 0;
-        double sum_P = DBL_MIN;
+        double cur_sum_sims = DBL_MIN;
         while (!found && iter < 200) {
 
-            // Compute Gaussian kernel row
+            // Compute Gaussian kernel row (similarities)
             for (int m = 0; m < K; m++) {
-                cur_P[m] = exp(-beta * distances[m + 1]);
+                cur_sim[m] = exp(-beta * distances[m + 1]);
             }
 
             // Compute entropy of current row
-            sum_P = DBL_MIN; // close to zero
+            cur_sum_sims = DBL_MIN; // close to zero
             for (int m = 0; m < K; m++) {
-                sum_P += cur_P[m];
+                cur_sum_sims += cur_sim[m];
             }
 
-            // p_{ij} = cur_P[j] / sum_P
+            // p_{j|i} = cur_sim[j] / cur_sum_sims
+            /*
+               $$
+               sim_{j|i} = exp(-\beta_i d_{ij}) \\  % TODO: why we use distances without squares?
+               p_{j|i} = sim_{j|i} / \sum_k sim_{k|i} \\
+               log(p_{j|i}) = -\beta_i d_{ij} - \ln(\sum_k sim_{k|i})
+               $$
+
+               $d_{ij}$ may be squared Euclidean distance, for example.
+
+               Entropy of the conditional distribution $P_i$ induced by the point $i$:
+               $$
+                H(P_i) = - \sum_j p_{j|i} \ln(p_{j|i}) = \\
+                \sum_j \frac{sim_{j|i}}{\sum_k sim_{k|i}} (\beta_i d_{ij} + \ln(\sum_k sim_{k|i})) = \\
+                \frac{\sum_j \beta_i d_{ij} sim_{j|i}}{\sum_k sim_{k|i}} + \sum_j \frac{sim_{j|i} \ln(\sum_k sim_{k|i})}{\sum_k sim_{k|i}} = \\
+                \frac{\sum_j \beta_i d_{ij} sim_{j|i}}{\sum_k sim_{k|i}} + \ln(\sum_k sim_{k|i}) \frac{1}{\sum_k sim_{k|i}} \sum_j sim_{j|i} = \\
+                \frac{\sum_j \beta_i d_{ij} sim_{j|i}}{\sum_k sim_{k|i}} + \ln(\sum_k sim_{k|i})
+               $$
+
+            */
             double H = .0;
             for (int m = 0; m < K; m++) {
-                H += beta * (distances[m + 1] * cur_P[m]);
+                H += beta * (distances[m + 1] * cur_sim[m]);
             }
-            H = (H / sum_P) + log(sum_P); // = sum_j p_{ij} log(p_{ij})
+            H = (H / cur_sum_sims) + log(cur_sum_sims); // = sum_j p_{ij} log(p_{ij})
 
             // Evaluate whether the entropy is within the tolerance level
             double Hdiff = H - log(perplexity);
@@ -478,11 +501,11 @@ computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
 
         // Row-normalize current row of P and store in matrix
         for (int m = 0; m < K; m++) {
-            cur_P[m] /= sum_P;
+            cur_sim[m] /= cur_sum_sims; // = P_{j|i}
         }
         for (int m = 0; m < K; m++) {
-            col_P[row_P[n] + m] = indices[m + 1].index();
-            val_P[row_P[n] + m] = cur_P[m];
+            nns_P[offset_P[i] + m] = indices[m + 1].index();
+            val_P[offset_P[i] + m] = cur_sim[m];
         }
 
         // Print progress
@@ -505,102 +528,128 @@ computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P,
     delete tree;
 }
 
+
+/*  Symmetrize the matrix P_{j|i} and get P_{ij}
+
+    Arguments:
+        _offset_P - pointer, to offsets for `_nns_P`; will be modified in-place
+        _nns_P - pointer, to indices (j) of the K nearest neighbors for each point; will be modified in-place
+        _val_P - pointer, to values of pairwise similarities between points, p_{j | i};
+                 (*_val_P)[offset_P[i] + k] is the similarity of the k-th nearest neighbor
+                 of point i (0 <= k < K) and point i;
+                 will be modified in-place.
+       N - number of input points
+ */
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
-void TSNE<treeT, dist_fn>::symmetrizeMatrix(int** _row_P, int** _col_P, double** _val_P, int N) {
+void TSNE<treeT, dist_fn>::symmetrizeMatrix(int** _offset_P, int** _nns_P, double** _val_P, int N) {
 
     // Get sparse matrix
-    int* row_P = *_row_P;
-    int* col_P = *_col_P;
+    int* offset_P = *_offset_P;
+    int* nns_P = *_nns_P;
     double* val_P = *_val_P;
 
-    // Count number of elements and row counts of symmetric matrix
-    int* row_counts = (int*) calloc(N, sizeof(int));
-    if (row_counts == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
-    for (int n = 0; n < N; n++) {
-        for (int i = row_P[n]; i < row_P[n + 1]; i++) {
+    // Count number of elements and offsets counts of symmetric matrix
+    int* num_nns = (int*) calloc(N, sizeof(int));
+    if (num_nns == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
+    for (int i = 0; i < N; ++i) {
+        for (int pos = offset_P[i]; pos < offset_P[i + 1]; ++pos) {
+            int j = nns_P[pos];
 
-            // Check whether element (col_P[i], n) is present
+            // Check whether element (j, i) is present, i.e. point #i is among of NNs of point #j and p_{i|j} != 0.
             bool present = false;
-            for (int m = row_P[col_P[i]]; m < row_P[col_P[i] + 1]; m++) {
-                if (col_P[m] == n) {
+            for (int sym_pos = offset_P[j]; sym_pos < offset_P[j + 1]; sym_pos++) {
+                if (nns_P[sym_pos] == i) {
                     present = true;
                     break;
                 }
             }
-            if (present) {
-                row_counts[n]++;
-            }
-            else {
-                row_counts[n]++;
-                row_counts[col_P[i]]++;
+            num_nns[i]++;
+            if (!present) {
+                num_nns[j]++; // reserve space for an extra point (#i) in the nns of #cur_nn_index
             }
         }
     }
-    int no_elem = 0;
+    int num_elements = 0;
     for (int n = 0; n < N; n++) {
-        no_elem += row_counts[n];
+        num_elements += num_nns[n];
     }
     // Allocate memory for symmetrized matrix
-    int*    sym_row_P = (int*)    malloc((N + 1) * sizeof(int));
-    int*    sym_col_P = (int*)    malloc(no_elem * sizeof(int));
-    double* sym_val_P = (double*) malloc(no_elem * sizeof(double));
-    if (sym_row_P == NULL || sym_col_P == NULL || sym_val_P == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
+    int*    sym_offset_P = (int*)    malloc((N + 1) * sizeof(int));
+    int*    sym_nns_P = (int*)    malloc(num_elements * sizeof(int));
+    double* sym_val_P = (double*) malloc(num_elements * sizeof(double));
+    if (sym_offset_P == NULL || sym_nns_P == NULL || sym_val_P == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
 
-    // Construct new row indices for symmetric matrix
-    sym_row_P[0] = 0;
-    for (int n = 0; n < N; n++) sym_row_P[n + 1] = sym_row_P[n] + row_counts[n];
+    // Construct new offsets for symmetric matrix
+    sym_offset_P[0] = 0;
+    for (int i = 0; i < N; ++i) {
+        sym_offset_P[i + 1] = sym_offset_P[i] + num_nns[i];
+    }
 
     // Fill the result matrix
     int* offset = (int*) calloc(N, sizeof(int));
     if (offset == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
-    for (int n = 0; n < N; n++) {
-        for (int i = row_P[n]; i < row_P[n + 1]; i++) {                                 // considering element(n, col_P[i])
+    for (int i = 0; i < N; ++i) {
+        for (int pos = offset_P[i]; pos < offset_P[i + 1]; ++pos) {  // considering element(i, j)
+            int j = nns_P[pos];
+            assert(i != j && "shouldn't have self as the nearest neighbor");
+            double p_ji = val_P[pos];  // p_{j|i}
 
-            // Check whether element (col_P[i], n) is present
+            // Check whether element (j, i) is present, i.e. p_{i|j} != 0.
             bool present = false;
-            for (int m = row_P[col_P[i]]; m < row_P[col_P[i] + 1]; m++) {
-                if (col_P[m] == n) {
+            for (int sym_pos = offset_P[j]; sym_pos < offset_P[j + 1]; ++sym_pos) {
+                double p_ij = val_P[sym_pos];  // p_{i|j}
+
+                if (nns_P[sym_pos] == i) {
                     present = true;
-                    if (n <= col_P[i]) {                                                // make sure we do not add elements twice
-                        sym_col_P[sym_row_P[n]        + offset[n]]        = col_P[i];
-                        sym_col_P[sym_row_P[col_P[i]] + offset[col_P[i]]] = n;
-                        sym_val_P[sym_row_P[n]        + offset[n]]        = val_P[i] + val_P[m];
-                        sym_val_P[sym_row_P[col_P[i]] + offset[col_P[i]]] = val_P[i] + val_P[m];
+                    if (i <= j) {  // make sure we do not add elements twice
+                        sym_nns_P[sym_offset_P[i] + offset[i]] = j;
+                        sym_nns_P[sym_offset_P[j] + offset[j]] = i;
+                        sym_val_P[sym_offset_P[i] + offset[i]] = p_ji + p_ij;
+                        sym_val_P[sym_offset_P[j] + offset[j]] = p_ji + p_ij;
                     }
                 }
             }
 
-            // If (col_P[i], n) is not present, there is no addition involved
+            // If (j, i) is not present (i.e. p_{i|j} = 0), there is no addition involved
             if (!present) {
-                sym_col_P[sym_row_P[n]        + offset[n]]        = col_P[i];
-                sym_col_P[sym_row_P[col_P[i]] + offset[col_P[i]]] = n;
-                sym_val_P[sym_row_P[n]        + offset[n]]        = val_P[i];
-                sym_val_P[sym_row_P[col_P[i]] + offset[col_P[i]]] = val_P[i];
+                sym_nns_P[sym_offset_P[i] + offset[i]] = j;
+                sym_nns_P[sym_offset_P[j] + offset[j]] = i;
+                sym_val_P[sym_offset_P[i] + offset[i]] = p_ji;
+                sym_val_P[sym_offset_P[j] + offset[j]] = p_ji;
             }
 
             // Update offsets
-            if (!present || (n <= col_P[i])) {
-                offset[n]++;
-                if (col_P[i] != n) {
-                    offset[col_P[i]]++;
+            if (!present || (i <= j)) {
+                offset[i]++;
+                if (j != i) {
+                    // shouldn't always be j!= i ?
+                    offset[j]++;
                 }
             }
         }
     }
 
+    // Check that all was done right
+    for (int i = 0; i < N; ++i) {
+        assert(num_nns[i] == offset[i] && "corrupted sym_nns_P matrix");
+    }
+
     // Divide the result by two
-    for (int i = 0; i < no_elem; i++) {
+    for (int i = 0; i < num_elements; i++) {
         sym_val_P[i] /= 2.0;
     }
 
     // Return symmetrized matrices
-    free(*_row_P); *_row_P = sym_row_P;
-    free(*_col_P); *_col_P = sym_col_P;
-    free(*_val_P); *_val_P = sym_val_P;
+    free(*_offset_P);
+    free(*_nns_P);
+    free(*_val_P);
+    *_offset_P = sym_offset_P;
+    *_nns_P = sym_nns_P;
+    *_val_P = sym_val_P;
 
-    // Free up some memery
+    // Free up some memory
     free(offset); offset = NULL;
-    free(row_counts); row_counts  = NULL;
+    free(num_nns); num_nns  = NULL;
 }
 
 
@@ -611,22 +660,23 @@ void TSNE<treeT, dist_fn>::zeroMean(double* X, int N, int D) {
     // Compute data mean
     double* mean = (double*) calloc(D, sizeof(double));
     if (mean == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
-    for (int n = 0; n < N; n++) {
-        for (int d = 0; d < D; d++) {
-            mean[d] += X[n * D + d];
+    for (int i = 0; i < N; ++i) {
+        for (int d = 0; d < D; ++d) {
+            mean[d] += X[i * D + d];
         }
     }
-    for (int d = 0; d < D; d++) {
+    for (int d = 0; d < D; ++d) {
         mean[d] /= (double) N;
     }
 
     // Subtract data mean
-    for (int n = 0; n < N; n++) {
-        for (int d = 0; d < D; d++) {
-            X[n * D + d] -= mean[d];
+    for (int i = 0; i < N; ++i) {
+        for (int d = 0; d < D; ++d) {
+            X[i * D + d] -= mean[d];
         }
     }
-    free(mean); mean = NULL;
+    free(mean);
+    mean = NULL;
 }
 
 
@@ -717,6 +767,7 @@ extern "C"
                      init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "angular_time_prenormed") {
+            // Experimental metric. Use on your own risk.
             const int margin = 20;
             const int slope = 100;
             const int max_time_distance = 3;

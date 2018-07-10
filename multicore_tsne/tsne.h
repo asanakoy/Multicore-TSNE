@@ -30,22 +30,22 @@ public:
             D - input dimensionality
             Y - array of size [N, no_dims], to fill with the resultant embedding
             no_dims - target dimensionality
-            should_normalize_input - make X zero mean and rescale values in each column to max_val=1?
-     */
+            should_normalize_input - make X zero mean and divide each element by the overall maximum value.
+    */
     void run(double* X, int N, int D, double* Y,
                int no_dims = 2, double perplexity = 30, double theta = .5,
                int num_threads = 1, int max_iter = 1000, int random_state = 0,
                bool init_from_Y = false, bool* is_frozen_Y = NULL, int verbose = 0,
                double early_exaggeration = 12, double learning_rate = 200,
                double *final_error = NULL, bool should_normalize_input = true);
-    void symmetrizeMatrix(int** row_P, int** col_P, double** val_P, int N);
+    void symmetrizeMatrix(int** offset_P, int** nns_P, double** val_P, int N);
 
 private:
     // Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
-    double computeGradient(int* inp_row_P, int* inp_col_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta, bool eval_error);
-    double evaluateError(int* row_P, int* col_P, double* val_P, double* Y, int N, int no_dims, double theta);
+    double computeGradient(int* inp_offset_P, int* inp_nns_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta, bool eval_error);
+    double evaluateError(int* offset_P, int* nns_P, double* val_P, double* Y, int N, int no_dims, double theta);
     void zeroMean(double* X, int N, int D);
-    void computeGaussianPerplexity(double* X, int N, int D, int** _row_P, int** _col_P, double** _val_P, double perplexity, int K, int verbose);
+    void computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P, double** _val_P, double perplexity, int K, int verbose);
     double randn();
 };
 
