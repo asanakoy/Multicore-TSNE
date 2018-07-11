@@ -53,9 +53,10 @@ install:
 script:
   - cd ..; python -m unittest discover -v MulticoreTSNE.tests; cd -
 
-after_success:
-  # TWINE_USERNAME/TWINE_PASSWORD env vars defined in Travis settings
-  - if [ "$TRAVIS_TAG" ]; then
-      pip install twine &&
-      twine upload --skip-existing dist/*;
-    fi
+# after_success:
+#   # TWINE_USERNAME/TWINE_PASSWORD env vars defined in Travis settings
+#   - if [ "$TRAVIS_TAG" ]; then
+#   2       pip install twine &&
+#       pip install twine &&
+#       twine upload --skip-existing dist/*;
+#     fi
