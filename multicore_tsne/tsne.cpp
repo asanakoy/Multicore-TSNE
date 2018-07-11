@@ -37,12 +37,12 @@
     #define NUM_THREADS(N) (1)
 #endif
 
- // WARNING: No early exaggeration will be made if is_frozen_Y != NULL
+ // WARNING: No early exaggeration will be made if lr_mult != NULL
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                int no_dims, double perplexity, double theta ,
                int num_threads, int max_iter, int random_state,
-               bool init_from_Y, bool* is_frozen_Y, int verbose,
+               bool init_from_Y, double* lr_mult, int verbose,
                double early_exaggeration, double learning_rate,
                double *final_error, bool should_normalize_input) {
 
@@ -142,21 +142,19 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         val_P[i] *= early_exaggeration;
     }
 
-    bool nothing_frozen = true; // has at least one frozen point
-    if (is_frozen_Y != NULL) {
-        for (int i = 0; i < N; ++i) {
-            if (is_frozen_Y[i]) {
-                nothing_frozen = false;
-                break;
-            }
-        }
+    bool lr_mult_was_passed = (lr_mult != NULL); // has at least one frozen point
+    if (!lr_mult_was_passed) {
+        lr_mult = new double[N];
+        std::fill_n(lr_mult, N, 1.0);
     }
+
 
     // Initialize solution (randomly), unless Y is already initialized
     if (init_from_Y) {
-        if (is_frozen_Y != NULL) {
+        if (lr_mult_was_passed) {
             // Immediately stop lying if nothing is frozen.
             // Passed Y is close to the true solution.
+            fprintf(stderr, "No early exaggeration will be used because lr_mult was passed.");
             stop_lying_iter = 0;
         } else {
             // do iteration with early exaggeration
@@ -181,12 +179,10 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 
         for (int i = 0; i < N * no_dims; ++i) {
             // TODO: implement lower learning rate (lr_mult <= 1.0) for some points instead of freezing
-            if (!nothing_frozen) {
-                // to freeze some points we need to skip updating them here.
-                int point_idx = i / no_dims;
-                if (is_frozen_Y[point_idx]) {
-                    continue;
-                }
+            int point_idx = i / no_dims;
+            if (lr_mult[point_idx] == 0.0) {
+                // The point i frozen. No need to update it.
+                continue;
             }
             // Update gains
             // If the sign of the gradient w.r.t. a parameter doesn't change,
@@ -196,7 +192,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
             gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8 + .01);
 
             // Perform gradient update (with momentum and gains)
-            uY[i] = momentum * uY[i] - eta * gains[i] * dY[i];
+            uY[i] = momentum * uY[i] - eta * gains[i] * lr_mult[point_idx] * dY[i];
             Y[i] += uY[i];
         }
 
@@ -240,6 +236,9 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     free(offset_P); offset_P = NULL;
     free(nns_P); nns_P = NULL;
     free(val_P); val_P = NULL;
+    if (!lr_mult_was_passed) {
+        delete lr_mult;
+    }
 
     if (verbose)
         fprintf(stderr, "Fitting performed in %4.2f seconds.\n", total_time);
@@ -763,7 +762,7 @@ extern "C"
                                 int max_iter = 1000,
                                 int random_state = -1,
                                 bool init_from_Y = false,
-                                bool* is_frozen_Y = NULL,
+                                double* lr_mult = NULL,
                                 int verbose = 0,
                                 double early_exaggeration = 12,
                                 double learning_rate = 200,
@@ -787,37 +786,37 @@ extern "C"
         if (str_metric == "precomputed") {
             TSNE<SplitTree, precomputed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "euclidean") {
             TSNE<SplitTree, euclidean_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "sqeuclidean") {
             TSNE<SplitTree, euclidean_distance_squared> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "cosine") {
             TSNE<SplitTree, cosine_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "cosine_prenormed") {
             TSNE<SplitTree, cosine_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "angular") {
             TSNE<SplitTree, angular_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "angular_prenormed") {
             TSNE<SplitTree, angular_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "angular_time_prenormed") {
             // Experimental metric. Use on your own risk.
@@ -828,12 +827,12 @@ extern "C"
                     margin, slope, max_time_distance);
             TSNE<SplitTree, angular_distance_time_prenormed<margin, slope, max_time_distance> > tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         } else if (str_metric == "angular_threshold_prenormed") {
              TSNE<SplitTree, angular_threshold_prenormed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
-                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
                      final_error, should_normalize_input);
         }
     }

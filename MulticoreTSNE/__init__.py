@@ -43,10 +43,9 @@ class MulticoreTSNE:
         -precomputed
     should_normalize_input: if true normalize input features to zero mean
         and rescale values in each column to have max_value=1. Will be ignored if metric='precomputed'.
-    is_frozen_point: None or np.array of bool.
-        If init is a precomputed array then np.array of bool can be passed to
-        define which embedding points must be frozen and not updated during optimization.
-        If None - update all points.
+    lr_mult: None or np.array of double.
+        Defines the learning rate multiplier for each of the embedding points during optimization.
+        If None - lr_mu;t=1.0 for every point.
 
     Parameter `init` doesn't support 'pca' initialization, but a precomputed
     array can be passed.
@@ -61,7 +60,7 @@ class MulticoreTSNE:
                  min_grad_norm=1e-07,
                  metric='euclidean',
                  init='random',
-                 is_frozen_init=None,
+                 lr_mult=None,
                  verbose=0,
                  random_state=None,
                  method='barnes_hut',
@@ -79,7 +78,7 @@ class MulticoreTSNE:
         self.random_state = -1 if random_state is None else random_state
         self.metric = metric
         self.init = init
-        self.is_frozen_init = is_frozen_init
+        self.lr_mult = lr_mult
         self.embedding_ = None
         self.n_iter_ = None
         self.kl_divergence_ = None
@@ -90,26 +89,22 @@ class MulticoreTSNE:
             assert init.ndim == 2, "init array must be 2D"
             assert init.shape[1] == n_components, "init array must be of shape (n_instances, n_components)"
             self.init = np.ascontiguousarray(init, float)
-            if isinstance(is_frozen_init, np.ndarray) and is_frozen_init.dtype == 'bool':
-                if len(is_frozen_init) != len(init):
-                    raise ValueError('is_frozen_init must be a boolean np.array '
-                                     'with the same number of elements as in init, '
-                                     '{} != {}'.format(len(is_frozen_init), len(init)))
-            elif is_frozen_init is not None:
-                raise ValueError('is_frozen_init must be None or a boolean np.array'
-                                 'when init != "random"')
+            if isinstance(self.lr_mult, np.ndarray) and self.lr_mult.dtype == 'double':
+                pass
+            elif self.lr_mult is not None:
+                raise ValueError(' when init != "random" lr_mult must be None or a double np.array')
         elif init != 'random':
             raise ValueError('init must be "random" or np.array')
-        elif is_frozen_init is not None:
-            raise ValueError('is_frozen_init must be None if init = "random". '
-                             'We cannot freeze random points.')
+        elif self.lr_mult is not None:
+            raise ValueError('lr_mult must be None if init = "random". '
+                             'There is no sense in changing learning rate multipliers for random points.')
 
         self.ffi = cffi.FFI()
         self.ffi.cdef(
             """void tsne_run_double(double* X, int N, int D, double* Y,
                                     int no_dims, double perplexity, double theta,
                                     int num_threads, int max_iter, int random_state,
-                                    bool init_from_Y, bool* is_frozen_Y, int verbose,
+                                    bool init_from_Y, double* lr_mult, int verbose,
                                     double early_exaggeration, double learning_rate,
                                     double *final_error, char* metric,
                                     bool should_normalize_input);""")
@@ -128,6 +123,10 @@ class MulticoreTSNE:
         return self
 
     def fit_transform(self, X, _y=None):
+        if self.lr_mult is not None and len(self.lr_mult) != len(X):
+            raise ValueError('lr_mult must be a double np.array '
+                             'with the same number of elements as in X, '
+                             '{} != {}'.format(len(self.lr_mult), len(X)))
 
         assert X.ndim == 2, 'X should be 2D array.'
 
@@ -153,17 +152,17 @@ class MulticoreTSNE:
         cffi_final_error = self.ffi.cast('double*', final_error.ctypes.data)
         cffi_metric = self.ffi.new('char[]', self.metric.encode('ascii'))
 
-        if self.is_frozen_init is not None:
-            is_frozen_Y = self.is_frozen_init.copy('C')
-            cffi_is_frozen_Y = self.ffi.cast('bool*', is_frozen_Y.ctypes.data)
+        if self.lr_mult is not None:
+            lr_mult = self.lr_mult.copy('C')
+            cffi_lr_mult = self.ffi.cast('double*', lr_mult.ctypes.data)
         else:
-            cffi_is_frozen_Y = self.ffi.cast('bool*', 0)
+            cffi_lr_mult = self.ffi.cast('double*', 0)
 
         t = FuncThread(self.C.tsne_run_double,
                        cffi_X, N, D,
                        cffi_Y, self.n_components,
                        self.perplexity, self.angle, self.n_jobs, self.n_iter, self.random_state,
-                       init_from_Y, cffi_is_frozen_Y, self.verbose, self.early_exaggeration,
+                       init_from_Y, cffi_lr_mult, self.verbose, self.early_exaggeration,
                        self.learning_rate,
                        cffi_final_error, cffi_metric, self.should_normalize_input)
         t.daemon = True

@@ -41,7 +41,7 @@ class TestMulticoreTSNE(unittest.TestCase):
 
     def test_n_jobs(self):
         X, y = self.Xy
-        tsne = MulticoreTSNE(n_iter=100, n_jobs=-2)
+        tsne = MulticoreTSNE(n_iter=100, n_jobs=2)
         tsne.fit_transform(X)
 
     def test_perplexity(self):
@@ -68,6 +68,23 @@ class TestMulticoreTSNE(unittest.TestCase):
         E2 = tsne.fit_transform(X)
         mean_diff = np.abs((E - E2).sum(1)).mean()
         self.assertLess(mean_diff, 30)
+
+    def test_lr_mult_exception(self):
+        X, y = self.Xy
+        lr_mult = np.ones(len(X), dtype=float)
+        lr_mult[:len(X) / 2] = 0.1
+        with self.assertRaises(ValueError) as context:
+            MulticoreTSNE(n_iter=100, lr_mult=lr_mult)
+        self.assertIn('lr_mult must be None if init = "random"', str(context.exception))
+
+    def test_lr_mult(self):
+        X, y = self.Xy
+        lr_mult = np.ones(len(X), dtype=float)
+        lr_mult[:len(X) / 2] = 0.1
+
+        tsne = MulticoreTSNE(n_iter=100, n_components=2, lr_mult=lr_mult, init=X[:, :2])
+        E = tsne.fit_transform(X)
+        self.assertFalse(np.any(np.isnan(E)))
 
     def test_attributes(self):
         X, y = self.Xy

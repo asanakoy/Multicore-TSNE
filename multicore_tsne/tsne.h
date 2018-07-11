@@ -35,7 +35,7 @@ public:
     void run(double* X, int N, int D, double* Y,
                int no_dims = 2, double perplexity = 30, double theta = .5,
                int num_threads = 1, int max_iter = 1000, int random_state = 0,
-               bool init_from_Y = false, bool* is_frozen_Y = NULL, int verbose = 0,
+               bool init_from_Y = false, double* lr_mult = NULL, int verbose = 0,
                double early_exaggeration = 12, double learning_rate = 200,
                double *final_error = NULL, bool should_normalize_input = true);
     void symmetrizeMatrix(int** offset_P, int** nns_P, double** val_P, int N);
