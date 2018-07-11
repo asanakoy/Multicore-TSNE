@@ -27,12 +27,25 @@ before_install:
     fi
 
   # Travis OS X image lacks Python3; download it from homebrew
-#  - if [ "$TRAVIS_OS_NAME" = osx ]; then
-#      brew update &&
-#      brew install python3 &&
-#      virtualenv env -p python3 &&
-#      source env/bin/activate;
-#    else
+  # python3 was renamed to python.
+  - if [ "$TRAVIS_OS_NAME" = osx ]; then
+      python --version;
+      echo "-- which virtualenv="$(which virtualenv);
+      sudo rm -rf $(which virtualenv);
+    fi
+
+  - if [ "$TRAVIS_OS_NAME" = osx ]; then
+      brew update;
+      brew upgrade python;
+      pip3 --version;
+      echo "-- which virtualenv="$(which virtualenv);
+      sudo -H pip3 install virtualenv;
+      virtualenv env -p python;
+      source env/bin/activate;
+      python --version;
+      pip3 install --upgrade wheel setuptools;
+    fi
+
   # C++17
   - if [ "$TRAVIS_OS_NAME" = linux ]; then
       sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test &&
@@ -40,7 +53,8 @@ before_install:
       sudo apt-get install -qq g++-6 &&
       sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-6 90;
     fi
-  - pip install -r requirements.txt
+  - pip --version
+  - pip install -U -r requirements.txt
   - python setup.py -v bdist_wheel
   - python setup.py -v sdist --formats=zip
 
@@ -50,15 +64,30 @@ install:
       pip install delocate &&
       delocate-wheel -v --require-archs=x86_64 dist/*.whl;
     else
-      mv dist/*.whl `python -c 'import sys; parts = sys.argv[1].split("-"); parts[4] = "manylinux1_x86_64.whl"; print("-".join(parts))' dist/*.whl`;
+      mv dist/*.whl `python -c 'import sys;
+      parts = sys.argv[1].split("-");
+      parts[4] = "manylinux1_x86_64.whl";
+      print("-".join(parts))' dist/*.whl`;
     fi &&
-    mv dist/*.whl `python -c 'import sys; parts = sys.argv[1].split("-"); parts[2] = "py2.py3"; parts[3] = "none"; print("-".join(parts))' dist/*.whl`
+    mv dist/*.whl
+      `python -c 'import sys;
+      parts = sys.argv[1].split("-");
+      parts[2] = "py2.py3";
+      parts[3] = "none";
+      print("-".join(parts))' dist/*.whl`
 
   - pip install .[test]
   - pip install -U dist/*.whl
 
+before_script:
+    # OSX is broken for Travis.
+    # Workaround from https://github.com/travis-ci/travis-ci/issues/8703#issuecomment-389117994
+    - if [ "$TRAVIS_OS_NAME" = osx ]; then
+        unset -f cd;
+      fi
+
 script:
-  - cd ..; python -m unittest discover -v MulticoreTSNE.tests; cd -
+  - cd .. && python -m unittest discover -v MulticoreTSNE.tests && cd -
 
 # after_success:
 #   # TWINE_USERNAME/TWINE_PASSWORD env vars defined in Travis settings
