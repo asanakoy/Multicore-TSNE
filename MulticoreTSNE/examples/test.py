@@ -54,8 +54,8 @@ def get_mnist():
 
 def plot(Y, classes, name):
     digits = set(classes)
-    fig = plt.figure()
-    colormap = plt.cm.spectral
+    fig = plt.figure(figsize=(20, 20))
+    colormap = plt.cm.nipy_spectral
     plt.gca().set_prop_cycle(
         cycler('color', [colormap(i) for i in np.linspace(0, 0.9, 10)]))
     ax = fig.add_subplot(111)
@@ -66,7 +66,7 @@ def plot(Y, classes, name):
             ax.plot(Y[idx], np.random.randn(Y[idx].shape[0]), 'o')
         else:
             ax.plot(Y[idx, 0], Y[idx, 1], 'o')
-        
+
         labels.append(d)
     ax.legend(labels, numpoints=1, fancybox=True)
     fig.savefig(name)
@@ -82,7 +82,8 @@ if args.n_objects != -1:
     mnist = mnist[:args.n_objects]
     classes = classes[:args.n_objects]
 
-tsne = TSNE(n_jobs=int(args.n_jobs), verbose=1, n_components=args.n_components, random_state=660)
+tsne = TSNE(n_jobs=int(args.n_jobs), metric='sqeuclidean',
+            verbose=1, n_components=args.n_components, random_state=660)
 
 time1 = time.time()
 mnist_tsne = tsne.fit_transform(mnist)
