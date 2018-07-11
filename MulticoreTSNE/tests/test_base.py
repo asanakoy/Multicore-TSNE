@@ -72,7 +72,7 @@ class TestMulticoreTSNE(unittest.TestCase):
     def test_lr_mult_exception(self):
         X, y = self.Xy
         lr_mult = np.ones(len(X), dtype=float)
-        lr_mult[:len(X) / 2] = 0.1
+        lr_mult[:len(X) // 2] = 0.1
         with self.assertRaises(ValueError) as context:
             MulticoreTSNE(n_iter=100, lr_mult=lr_mult)
         self.assertIn('lr_mult must be None if init = "random"', str(context.exception))
@@ -80,7 +80,7 @@ class TestMulticoreTSNE(unittest.TestCase):
     def test_lr_mult(self):
         X, y = self.Xy
         lr_mult = np.ones(len(X), dtype=float)
-        lr_mult[:len(X) / 2] = 0.1
+        lr_mult[:len(X) // 2] = 0.1
 
         tsne = MulticoreTSNE(n_iter=100, n_components=2, lr_mult=lr_mult, init=X[:, :2])
         E = tsne.fit_transform(X)
