@@ -147,7 +147,7 @@ class MulticoreTSNE:
         cffi_Y = self.ffi.cast('double*', Y.ctypes.data)
         final_error = np.array(0, dtype=float)
         cffi_final_error = self.ffi.cast('double*', final_error.ctypes.data)
-        cffi_metric = self.ffi.new('char[]', self.metric)
+        cffi_metric = self.ffi.new('char[]', self.metric.encode('ascii'))
 
         if self.is_frozen_init is not None:
             is_frozen_Y = self.is_frozen_init.copy('C')
