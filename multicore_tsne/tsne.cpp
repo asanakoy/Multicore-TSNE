@@ -10,6 +10,7 @@
  *  Fork by Artsiom Sanakoyeu, 2018. enorone@gmail.com
  */
 
+#include <algorithm>
 #include <cmath>
 #include <cfloat>
 #include <cstdlib>
@@ -17,6 +18,7 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <numeric>
 #include <stdexcept>
 
 #ifdef _OPENMP
@@ -92,7 +94,13 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         fprintf(stderr, "Computing input similarities...\n");
 
     start = time(0);
+    if (dist_fn == precomputed_distance && should_normalize_input) {
+        if (verbose)
+            fprintf(stderr, "Ignoring should_normalize_input flag for metric='precomputed'...\n");
+        should_normalize_input = false;
+    }
     if (should_normalize_input) {
+        assert(dist_fn != precomputed_distance);
         zeroMean(X, N, D);
         double max_X = .0;
         for (int i = 0; i < N * D; ++i) {
@@ -380,10 +388,13 @@ computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P
     if (perplexity > K) fprintf(stderr, "Perplexity should be lower than K!\n");
 
     // Allocate the memory we need
-    *_offset_P = (int*)    malloc((N + 1) * sizeof(int));
-    *_nns_P = (int*)    calloc(N * K, sizeof(int));
-    *_val_P = (double*) calloc(N * K, sizeof(double));
-    if (*_offset_P == NULL || *_nns_P == NULL || *_val_P == NULL) { fprintf(stderr, "Memory allocation failed!\n"); exit(1); }
+    *_offset_P = (int *) malloc((N + 1) * sizeof(int));
+    *_nns_P = (int *) calloc(N * K, sizeof(int));
+    *_val_P = (double *) calloc(N * K, sizeof(double));
+    if (*_offset_P == NULL || *_nns_P == NULL || *_val_P == NULL) {
+        fprintf(stderr, "Memory allocation failed!\n");
+        exit(1);
+    }
 
     /*
         offset_P -- int array of size N,  offsets for `nns_P` (i). (0, K, 2K, ... NK)
@@ -392,22 +403,27 @@ computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P
         val_P -- values of pairwise similarities between points, p_{j | i};
              val_P[offset_P[i] + k] - is the similarity of the k-th nearest neighbor of point i (0 <= k < K) and point i.
     */
-    int* offset_P = *_offset_P;
-    int* nns_P = *_nns_P;
-    double* val_P = *_val_P;
+    int *offset_P = *_offset_P;
+    int *nns_P = *_nns_P;
+    double *val_P = *_val_P;
 
     offset_P[0] = 0;
     for (int n = 0; n < N; ++n) {
         offset_P[n + 1] = offset_P[n] + K;
     }
 
-    // Build ball tree on data set
-    VpTree<DataPoint, dist_fn>* tree = new VpTree<DataPoint, dist_fn>();
+    VpTree<DataPoint, dist_fn> *tree = NULL;
     std::vector<DataPoint> obj_X(N, DataPoint(D, -1, X));
     for (int n = 0; n < N; ++n) {
         obj_X[n] = DataPoint(D, n, X + n * D);
     }
-    tree->create(obj_X);
+    if (dist_fn != precomputed_distance) {
+        // Build ball tree on data set
+        tree = new VpTree<DataPoint, dist_fn>();
+        tree->create(obj_X);
+    } else {
+        assert(D == N && "X must be square distance matrix if metric='precomputed'");
+    }
 
     // Loop over all points to find nearest neighbors
     if (verbose)
@@ -417,15 +433,33 @@ computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P
 #ifdef _OPENMP
     #pragma omp parallel for
 #endif
-    for (int i = 0; i < N; ++i)
-    {
+    for (int i = 0; i < N; ++i) {
         std::vector<double> cur_sim(K);
-        std::vector<DataPoint> indices;
         std::vector<double> distances;
+        std::vector<int> indices;
 
         // Find nearest neighbors.
-        // First retrieved will be obj_X[i] itself.
-        tree->search(obj_X[i], K + 1, &indices, &distances);
+        if (dist_fn != precomputed_distance) {
+            // First retrieved will be obj_X[i] itself.
+            std::vector<DataPoint> found_points;
+            tree->search(obj_X[i], K + 1, &found_points, &distances);
+
+            indices.reserve(found_points.size());
+            std::transform(found_points.begin(), found_points.end(),
+                           std::back_inserter(indices), [](DataPoint p){return p.index();});
+        } else {
+            double* dists_row = obj_X[i]._x;
+
+            indices.assign(N, 0);
+            std::iota(indices.begin(), indices.end(), 0); // initialize indices with range [0, ... N-1]
+            // argsort(dists_row) -> indices
+            sort(indices.begin(), indices.end(),
+                 [&dists_row](int idx1, int idx2) {return dists_row[idx1] < dists_row[idx2];});
+            // fill distances to the first K + 1 NNs using the corresponding indices
+            std::transform(indices.begin(), indices.begin() + K + 1,
+                           std::back_inserter(distances), [&dists_row](int idx){return dists_row[idx];});
+        }
+        assert(indices[0] == i);
 
         // Initialize some variables for binary search
         bool found = false;
@@ -507,7 +541,7 @@ computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P
             cur_sim[m] /= cur_sum_sims; // = P_{j|i}
         }
         for (int m = 0; m < K; m++) {
-            nns_P[offset_P[i] + m] = indices[m + 1].index();
+            nns_P[offset_P[i] + m] = indices[m + 1];
             val_P[offset_P[i] + m] = cur_sim[m];
         }
 
@@ -528,7 +562,9 @@ computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P
 
     // Clean up memory
     obj_X.clear();
-    delete tree;
+    if (tree != NULL) {
+        delete tree;
+    }
 }
 
 
@@ -704,12 +740,20 @@ extern "C"
     #endif
     /*
         Arguments:
+            X - double matrix of size [N, D]
+            N - number of points
+            D - input dimensionality
+            Y - array of size [N, no_dims], to fill with the resultant embedding,
+                or to use as initialization if init_from_Y == True.
+
             metric - one of:
                 "euclidean", "sqeuclidean",
                 "cosine", "cosine_prenormed",
-                "angular", "angular_prenormed".
+                "angular", "angular_prenormed",
+                "precomputed".
                 If "cosine_distance_prenormed" or "angular_distance_prenormed" is used
                 then each row of X must have norm 1.
+
      */
     extern void tsne_run_double(double* X, int N, int D, double* Y,
                                 int no_dims = 2,
@@ -731,7 +775,8 @@ extern "C"
             fprintf(stderr, "Performing t-SNE using %d cores.\n", NUM_THREADS(num_threads));
 
         std::string str_metric = std::string(metric);
-        if ((str_metric != "euclidean") && (str_metric != "sqeuclidean")
+        if ((str_metric != "precomputed") &&
+            (str_metric != "euclidean") && (str_metric != "sqeuclidean")
             && (str_metric != "cosine") && (str_metric != "cosine_prenormed")
             && (str_metric != "angular") && (str_metric != "angular_prenormed")
             && (str_metric != "angular_time_prenormed")
@@ -739,7 +784,12 @@ extern "C"
             throw std::invalid_argument(std::string("received invalid metric name:") + str_metric);
         }
 
-        if (str_metric == "euclidean") {
+        if (str_metric == "precomputed") {
+            TSNE<SplitTree, precomputed_distance> tsne;
+            tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
+                     init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,
+                     final_error, should_normalize_input);
+        } else if (str_metric == "euclidean") {
             TSNE<SplitTree, euclidean_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, is_frozen_Y, verbose, early_exaggeration, learning_rate,

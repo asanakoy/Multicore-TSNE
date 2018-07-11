@@ -1,6 +1,17 @@
-# Multicore t-SNE [![Build Status](https://travis-ci.org/DmitryUlyanov/Multicore-TSNE.svg?branch=master)](https://travis-ci.org/DmitryUlyanov/Multicore-TSNE)
+# Multicore t-SNE [![Build Status](https://travis-ci.org/asanakoy/Multicore-TSNE.svg?branch=master)](https://travis-ci.org/asanakoy/Multicore-TSNE)
 
 This is a multicore modification of [Barnes-Hut t-SNE](https://github.com/lvdmaaten/bhtsne) by L. Van der Maaten with python and Torch CFFI-based wrappers. This code also works **faster than sklearn.TSNE** on 1 core.
+
+Difference of **this fork** with Multicore t-SNE repository of 
+                [DmitryUlyanov](https://github.com/DmitryUlyanov/Multicore-TSNE):
+1. Refactored code with explanation of the implementation in the comments.
+2. More metrics available:
+    - Euclidean distance
+    - Squared euclidean distance
+    - Angular distance
+    - Cosine distance (not a real metric)
+    - Precomputed distance marix
+3. Possibility to freeze some specific point or set a lower learning rate for them.
 
 <center><img src="mnist-tsne.png" width="512"></center>
 
@@ -12,7 +23,13 @@ Barnes-Hut t-SNE is done in two steps.
 
 - Second step: the embedding is optimized using gradient descent. This part is essentially consecutive so we can only optimize within iteration. In fact some parts can be parallelized effectively, but not all of them a parallelized for now. That is why second step speed-up will not be that significant as first step sepeed-up but there is still room for improvement.
 
-So when can you benefit from parallelization? It is almost true, that the second step computation time is constant of `D` and depends mostly on `N`. The first part's time depends on `D` a lot, so for small `D` `time(Step 1) << time(Step 2)`, for large `D` `time(Step 1) >> time(Step 2)`. As we are only good at parallelizing step 1 we will benefit most when `D` is large enough (MNIST's `D = 784` is large, `D = 10` even for `N=1000000` is not so much). I wrote multicore modification originally for [Springleaf competition](https://www.kaggle.com/c/springleaf-marketing-response), where my data table was about `300000 x 3000` and only several days left till the end of the competition so any speed-up was handy.
+So when can you benefit from parallelization? 
+It is almost true, that the second step computation time is constant of `D` and 
+depends mostly on `N`. The first part's time depends on `D` a lot, 
+so for small `D` `time(Step 1) << time(Step 2)`, 
+for large `D` `time(Step 1) >> time(Step 2)`. 
+As we are only good at parallelizing step 1 we will benefit most when `D` 
+is large enough (MNIST's `D = 784` is large, `D = 10` even for `N=1000000` is not so much). 
 
 # Benchmark
 
@@ -47,9 +64,15 @@ This table shows a relative to 1 core speed-up when using `n` cores.
 Python and torch wrappers are available.
 
 ## Python
-### Install
 
-Make sure `cmake` is installed on your system, and you will also need a sensible C++ compiler, such as `gcc` or `llvm-clang`. On macOS, you can get both via [homebrew](https://brew.sh/).
+### Requirements
+
+- `cmake >= v3.8` as we need C++17 support
+- C++ compiler, such as `gcc` or `llvm-clang`. 
+  On macOS, you can get both via [homebrew](https://brew.sh/).
+- `Python 2.7` or `3.6`
+
+### Install
 
 To install the package, please do:
 ```
@@ -57,8 +80,6 @@ git clone https://github.com/DmitryUlyanov/Multicore-TSNE.git
 cd Multicore-TSNE/
 pip install .
 ```
-
-Tested with both Python 2.7 and 3.6 (conda) and Ubuntu 14.04.
 
 ### Run
 
@@ -73,7 +94,8 @@ Y = tsne.fit_transform(X)
 
 Please refer to [sklearn TSNE manual](http://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html) for parameters explanation.
 
-This implementation `n_components=2`, which is the most common case (use [Barnes-Hut t-SNE](https://github.com/lvdmaaten/bhtsne) or sklearn otherwise). Also note that some parameters are there just for the sake of compatibility with sklearn and are otherwise ignored. See `MulticoreTSNE` class docstring for more info.
+This implementation `n_components=2`, 
+which is the most common case (use [Barnes-Hut t-SNE](https://github.com/lvdmaaten/bhtsne) or sklearn otherwise). Also note that some parameters are there just for the sake of compatibility with sklearn and are otherwise ignored. See `MulticoreTSNE` class docstring for more info.
 
 ### Test
 
@@ -90,27 +112,6 @@ To make the computation log visible in jupyter please install `wurlitzer` (`pip 
 ```
 Memory leakages are possible if you interrupt the process. Should be OK if you let it run until the end.
 
-## Torch
-
-To install execute the following command from repository folder:
-```
-luarocks make torch/tsne-1.0-0.rockspec
-```
-or
-
-```
-luarocks install https://raw.githubusercontent.com/DmitryUlyanov/Multicore-TSNE/master/torch/tsne-1.0-0.rockspec
-```
-
-You can run t-SNE like that:
-```
-tsne = require 'tsne'
-
-Y = tsne(X, n_components, perplexity, n_iter, angle, n_jobs)
-```
-
-`torch.DoubleTensor` type only supported for now.
-
 # License
 
 Inherited from [original repo's license](https://github.com/lvdmaaten/bhtsne).
@@ -125,6 +126,15 @@ Inherited from [original repo's license](https://github.com/lvdmaaten/bhtsne).
 Please cite this repository if it was useful for your research:
 
 ```
+@misc{Sanakoyeu2018,
+  author = {Sanakoyeu, Artsiom},
+  title = {Multicore-TSNE},
+  year = {2018},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/asanakoy/Multicore-TSNE}},
+}
+
 @misc{Ulyanov2016,
   author = {Ulyanov, Dmitry},
   title = {Multicore-TSNE},

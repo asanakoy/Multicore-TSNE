@@ -1,3 +1,4 @@
+from ddt import ddt, data
 import unittest
 from functools import partial
 
@@ -18,6 +19,7 @@ def pdist(X):
     return pairwise_distances(X)[np.triu_indices(X.shape[0], 1)]
 
 
+@ddt
 class TestMulticoreTSNE(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -76,3 +78,26 @@ class TestMulticoreTSNE(unittest.TestCase):
         self.assertIs(tsne.embedding_, E)
         self.assertGreater(tsne.kl_divergence_, 0)
         self.assertEqual(tsne.n_iter_, N_ITER)
+
+    @data('euclidean', 'sqeuclidean', 'cosine', 'angular', 'precomputed')
+    def test_metric(self, metric):
+        X, y = self.Xy
+        tsne = MulticoreTSNE(perplexity=5, n_iter=500, metric=metric)
+        if metric == 'precomputed':
+            dist_matrix = pairwise_distances(X, metric='euclidean')
+            E = tsne.fit_transform(dist_matrix)
+        else:
+            E = tsne.fit_transform(X)
+
+        self.assertEqual(E.shape, (X.shape[0], 2))
+
+        max_intracluster = max(pdist(E[y == 0]).max(),
+                               pdist(E[y == 1]).max())
+        min_intercluster = pairwise_distances(E[y == 0],
+                                              E[y == 1]).min()
+
+        self.assertGreater(min_intercluster, max_intracluster)
+
+
+if __name__ == '__main__':
+    unittest.main()

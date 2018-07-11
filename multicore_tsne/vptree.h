@@ -74,6 +74,13 @@ public:
 };
 
 
+// Just an empty placeholder
+double precomputed_distance(const DataPoint &t1, const DataPoint &t2) {
+    assert(false && "should never be called");
+    return -1;
+}
+
+
 double euclidean_distance_squared(const DataPoint &t1, const DataPoint &t2) {
     double dd = .0;
     for (int d = 0; d < t1.dimensionality(); d++) {

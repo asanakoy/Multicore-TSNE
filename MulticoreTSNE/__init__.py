@@ -35,10 +35,14 @@ class MulticoreTSNE:
     * method
 
     Args:
-    cheat_metric: if true squared equclidean distance is used to build VPTree.
-        Usually leads to the same quality, but much faster.
+    metric: which metric to use to build VPTree
+        - euclidean
+        - sqequclidean: usually leads to the same quality as euqclidean, but much faster.
+        - cosine
+        - angular
+        -precomputed
     should_normalize_input: if true normalize input features to zero mean
-        and rescale values in each column to have max_value=1.
+        and rescale values in each column to have max_value=1. Will be ignored if metric='precomputed'.
     is_frozen_point: None or np.array of bool.
         If init is a precomputed array then np.array of bool can be passed to
         define which embedding points must be frozen and not updated during optimization.
