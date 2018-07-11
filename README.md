@@ -1,4 +1,4 @@
-# Multicore t-SNE [![Build Status](https://travis-ci.org/asanakoy/Multicore-TSNE.svg?branch=master)](https://travis-ci.org/asanakoy/Multicore-TSNE)
+# Multicore t-SNE [![Build Status](https://travis-ci.com/asanakoy/Multicore-TSNE.svg?branch=master)](https://travis-ci.com/asanakoy/Multicore-TSNE)
 
 This is a multicore modification of [Barnes-Hut t-SNE](https://github.com/lvdmaaten/bhtsne) by L. Van der Maaten with python and Torch CFFI-based wrappers. This code also works **faster than sklearn.TSNE** on 1 core.
 
