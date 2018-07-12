@@ -46,6 +46,8 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                double early_exaggeration, double learning_rate,
                double *final_error, bool should_normalize_input) {
 
+    assert(early_exaggeration > 0 && "early_exaggeration multiplier cannot be <= 0!");
+
     if (N - 1 < 3 * perplexity) {
         perplexity = (N - 1) / 3;
         if (verbose)
@@ -113,7 +115,12 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     // Compute input similarities
     int* offset_P; int* nns_P; double* val_P;
     // Compute asymmetric pairwise input similarities
-    computeGaussianPerplexity(X, N, D, &offset_P, &nns_P, &val_P, perplexity, (int) (3 * perplexity), verbose);
+    int number_nns_to_consider = (int) (3 * perplexity);  // TODO: make as parameter
+    computeGaussianPerplexity(X, N, D,
+                              &offset_P, &nns_P, &val_P,
+                              perplexity,
+                              number_nns_to_consider,
+                              verbose);
 
     // Symmetrize input similarities
     symmetrizeMatrix(&offset_P, &nns_P, &val_P, N);

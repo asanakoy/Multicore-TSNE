@@ -83,6 +83,8 @@ class MulticoreTSNE:
         self.n_iter_ = None
         self.kl_divergence_ = None
         self.verbose = int(verbose)
+        if early_exaggeration <= 0:
+            raise ValueError('early_exaggeration must be > 0')
         assert method == 'barnes_hut', 'Only Barnes-Hut method is allowed'
         assert isinstance(init, np.ndarray) or init == 'random', "init must be 'random' or array"
         if isinstance(init, np.ndarray):
