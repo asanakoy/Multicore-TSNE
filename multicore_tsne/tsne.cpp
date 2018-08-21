@@ -44,9 +44,13 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                int num_threads, int max_iter, int random_state,
                bool init_from_Y, double* lr_mult, int verbose,
                double early_exaggeration, double learning_rate,
-               double *final_error, bool should_normalize_input) {
-
-    assert(early_exaggeration > 0 && "early_exaggeration multiplier cannot be <= 0!");
+               double *final_error, bool should_normalize_input, int disjoint_set_size) {
+    if (early_exaggeration <= 0) {
+        throw std::invalid_argument("early_exaggeration multiplier cannot be <= 0!");
+    }
+    if (disjoint_set_size < 0) {
+        throw std::invalid_argument("disjoint_set_size must be >= 0");
+    }
 
     if (N - 1 < 3 * perplexity) {
         perplexity = (N - 1) / 3;
@@ -120,7 +124,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                               &offset_P, &nns_P, &val_P,
                               perplexity,
                               number_nns_to_consider,
-                              verbose);
+                              verbose, disjoint_set_size);
 
     // Symmetrize input similarities
     symmetrizeMatrix(&offset_P, &nns_P, &val_P, N);
@@ -182,10 +186,9 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         bool need_eval_error = (verbose && ((iter > 0 && iter % 50 == 0) || (iter == max_iter - 1)));
 
         // Compute approximate gradient
-        double error = computeGradient(offset_P, nns_P, val_P, Y, N, no_dims, dY, theta, need_eval_error);
+        double error = computeGradient(offset_P, nns_P, val_P, Y, N, no_dims, dY, theta, need_eval_error, disjoint_set_size);
 
         for (int i = 0; i < N * no_dims; ++i) {
-            // TODO: implement lower learning rate (lr_mult <= 1.0) for some points instead of freezing
             int point_idx = i / no_dims;
             if (lr_mult[point_idx] == 0.0) {
                 // The point i frozen. No need to update it.
@@ -233,7 +236,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     end = time(0); total_time += (float) (end - start) ;
 
     if (final_error != NULL)
-        *final_error = evaluateError(offset_P, nns_P, val_P, Y, N, no_dims, theta);
+        *final_error = evaluateError(offset_P, nns_P, val_P, Y, N, no_dims, theta, disjoint_set_size);
 
     // Clean up memory
     free(dY);
@@ -258,9 +261,11 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 double TSNE<treeT, dist_fn>::
 computeGradient(int* inp_row_P, int* inp_nns_P, double* inp_val_P,
-                double* Y, int N, int no_dims, double* dC, double theta, bool eval_error) {
+                double* Y, int N, int no_dims, double* dC, double theta, bool eval_error, int disjoint_set_size) {
+
     // Construct quadtree on current map
-    treeT* tree = new treeT(Y, N, no_dims);
+    // One for first disjoint set, one for another
+    treeT* tree[2] = {new treeT(Y, disjoint_set_size, no_dims), new treeT(Y + disjoint_set_size * no_dims, N - disjoint_set_size, no_dims)};
     
     // Compute all terms required for t-SNE gradient
     double* Q = new double[N];
@@ -271,7 +276,7 @@ computeGradient(int* inp_row_P, int* inp_nns_P, double* inp_val_P,
     double C = 0.;
 
     if (pos_f == NULL || neg_f == NULL) { 
-        fprintf(stderr, "Memory allocation failed!\n"); exit(1); 
+        fprintf(stderr, "Memory allocation failed!\n"); exit(1);
     }
     
 #ifdef _OPENMP
@@ -285,6 +290,10 @@ computeGradient(int* inp_row_P, int* inp_nns_P, double* inp_val_P,
             // Compute pairwise distance and Q-value
             double D = .0;
             int ind2 = inp_nns_P[i] * no_dims;
+            if ((n < disjoint_set_size && inp_nns_P[i] >= disjoint_set_size) ||
+                (n >= disjoint_set_size && inp_nns_P[i] < disjoint_set_size)) {
+                fprintf(stderr, "Oops! Neighbor from another disjoint set!\n");
+            }
             for (int d = 0; d < no_dims; ++d) {
                 double t = Y[ind1 + d] - Y[ind2 + d];
                 D += t * t;
@@ -303,23 +312,34 @@ computeGradient(int* inp_row_P, int* inp_nns_P, double* inp_val_P,
             }
         }
         
-        // NoneEdge forces
-        double this_Q = .0;
-        tree->computeNonEdgeForces(n, theta, neg_f + n * no_dims, &this_Q);
+        // NoneEdge forces (repulsive)
+        double this_Q = .0 ;
+        // Do not repulse points from different disjoint sets
+        if (n < disjoint_set_size) {
+            tree[0]->computeNonEdgeForces(n, theta, neg_f + n * no_dims, &this_Q);
+        } else {
+            tree[1]->computeNonEdgeForces(n - disjoint_set_size, theta, neg_f + n * no_dims, &this_Q);
+        }
         Q[n] = this_Q;
     }
     
     double sum_Q = 0.;
+    // sum_Q is Z = \sum_{i!=j} (1 / (1 + d(y_i, y_j)**2))
     for (int i = 0; i < N; ++i) {
         sum_Q += Q[i];
     }
+    // To compensate the normalization term when we have 2 disjoint sets.
+    int block_ab_size = disjoint_set_size * (N - disjoint_set_size); // \sum_{i and j from different sets} 1 / ( 1 + 0**2)
+    sum_Q += 2 * block_ab_size;
 
     // Compute final t-SNE gradient
+    // neg_f[i] here is (q_{ij}*Z)**2 * (y_i - Y_j)
     for (int i = 0; i < N * no_dims; ++i) {
         dC[i] = pos_f[i] - (neg_f[i] / sum_Q);
     }
 
-    delete tree;
+    delete tree[0];
+    delete tree[1];
     delete[] pos_f;
     delete[] neg_f;
     delete[] Q;
@@ -332,18 +352,24 @@ computeGradient(int* inp_row_P, int* inp_nns_P, double* inp_val_P,
 
 // Evaluate t-SNE cost function (approximately)
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
-double TSNE<treeT, dist_fn>::evaluateError(int* offset_P, int* nns_P, double* val_P, double* Y, int N, int no_dims, double theta)
+double TSNE<treeT, dist_fn>::evaluateError(int* offset_P, int* nns_P, double* val_P, double* Y, int N, int no_dims, double theta, int disjoint_set_size)
 {
 
     // Get estimate of normalization term
-    treeT* tree = new treeT(Y, N, no_dims);
+    // One tree for first disjoint set, one for another
+    treeT* tree[2] = {new treeT(Y, disjoint_set_size, no_dims), new treeT(Y + disjoint_set_size * no_dims, N - disjoint_set_size, no_dims)};
 
     double* buff = new double[no_dims]();
     double sum_Q = .0;
-    for (int n = 0; n < N; ++n) {
-        tree->computeNonEdgeForces(n, theta, buff, &sum_Q);
+    for (int n = 0; n < disjoint_set_size; ++n) {
+        tree[0]->computeNonEdgeForces(n, theta, buff, &sum_Q);
     }
-    delete tree;
+    for (int n = disjoint_set_size; n < N; ++n) {
+        tree[1]->computeNonEdgeForces(n - disjoint_set_size, theta, buff, &sum_Q);
+    }
+    sum_Q += 2 * disjoint_set_size * (N - disjoint_set_size); // \sum_{i and j from different sets} 1 / ( 1 + 0**2)
+    delete tree[0];
+    delete tree[1];
     delete[] buff;
     
     // Loop over all edges to compute t-SNE error
@@ -389,7 +415,22 @@ double TSNE<treeT, dist_fn>::evaluateError(int* offset_P, int* nns_P, double* va
 template <class treeT, double (*dist_fn)(const DataPoint&, const DataPoint&)>
 void TSNE<treeT, dist_fn>::
 computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P,
-                          double** _val_P, double perplexity, int K, int verbose) {
+                          double** _val_P, double perplexity, int K, int verbose, int disjoint_set_size) {
+
+    assert(dist_fn == precomputed_distance || disjoint_set_size == 0 &&
+                                               "disjoint_set_size must be 0 if distance is not precomputed");
+    if (disjoint_set_size > 0) {
+        if ((K > disjoint_set_size - 1) || (K > N - disjoint_set_size - 1)) {
+            char msg[256];
+            sprintf(msg, "number of nearest neighbors to consider (%i) is larger than disjoint set size (%i or %i)", K, disjoint_set_size, N - disjoint_set_size);
+            throw std::invalid_argument(msg);
+        }
+    }
+    if (K > N) {
+        char msg[256];
+        sprintf(msg, "number of nearest neighbors to consider (%i) is larger than number of points (%i )", K, N);
+        throw std::invalid_argument(msg);
+    }
 
     if (perplexity > K) fprintf(stderr, "Perplexity should be lower than K!\n");
 
@@ -456,14 +497,20 @@ computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P
         } else {
             double* dists_row = obj_X[i]._x;
 
-            indices.assign(N, 0);
-            std::iota(indices.begin(), indices.end(), 0); // initialize indices with range [0, ... N-1]
+            if (i < disjoint_set_size) {
+                indices.assign(disjoint_set_size, 0);
+                std::iota(indices.begin(), indices.end(), 0); // initialize indices with range [0, ... disjoint_set_size-1]
+            } else {
+                indices.assign(N - disjoint_set_size, 0);
+                std::iota(indices.begin(), indices.end(), disjoint_set_size); // initialize indices with range [disjoint_set_size, ... N-1]
+            }
             // argsort(dists_row) -> indices
             sort(indices.begin(), indices.end(),
-                 [&dists_row](int idx1, int idx2) {return dists_row[idx1] < dists_row[idx2];});
+                 [&dists_row](int idx1, int idx2) { return dists_row[idx1] < dists_row[idx2]; });
             // fill distances to the first K + 1 NNs using the corresponding indices
             std::transform(indices.begin(), indices.begin() + K + 1,
-                           std::back_inserter(distances), [&dists_row](int idx){return dists_row[idx];});
+                           std::back_inserter(distances), [&dists_row](int idx) { return dists_row[idx]; });
+
         }
         assert(indices[0] == i);
 
@@ -765,6 +812,7 @@ extern "C"
                                 int no_dims = 2,
                                 double perplexity = 30,
                                 double theta = .5,
+                                int disjoint_set_size = 0,
                                 int num_threads = 1,
                                 int max_iter = 1000,
                                 int random_state = -1,
@@ -794,37 +842,37 @@ extern "C"
             TSNE<SplitTree, precomputed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         } else if (str_metric == "euclidean") {
             TSNE<SplitTree, euclidean_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         } else if (str_metric == "sqeuclidean") {
             TSNE<SplitTree, euclidean_distance_squared> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         } else if (str_metric == "cosine") {
             TSNE<SplitTree, cosine_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         } else if (str_metric == "cosine_prenormed") {
             TSNE<SplitTree, cosine_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         } else if (str_metric == "angular") {
             TSNE<SplitTree, angular_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         } else if (str_metric == "angular_prenormed") {
             TSNE<SplitTree, angular_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         } else if (str_metric == "angular_time_prenormed") {
             // Experimental metric. Use on your own risk.
             const int margin = 20;
@@ -835,12 +883,12 @@ extern "C"
             TSNE<SplitTree, angular_distance_time_prenormed<margin, slope, max_time_distance> > tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         } else if (str_metric == "angular_threshold_prenormed") {
              TSNE<SplitTree, angular_threshold_prenormed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input);
+                     final_error, should_normalize_input, disjoint_set_size);
         }
     }
 }

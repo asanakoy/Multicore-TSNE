@@ -37,15 +37,15 @@ public:
                int num_threads = 1, int max_iter = 1000, int random_state = 0,
                bool init_from_Y = false, double* lr_mult = NULL, int verbose = 0,
                double early_exaggeration = 12, double learning_rate = 200,
-               double *final_error = NULL, bool should_normalize_input = true);
+               double *final_error = NULL, bool should_normalize_input = true, int disjoint_set_size = 0);
     void symmetrizeMatrix(int** offset_P, int** nns_P, double** val_P, int N);
 
 private:
     // Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
-    double computeGradient(int* inp_offset_P, int* inp_nns_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta, bool eval_error);
-    double evaluateError(int* offset_P, int* nns_P, double* val_P, double* Y, int N, int no_dims, double theta);
+    double computeGradient(int* inp_offset_P, int* inp_nns_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta, bool eval_error, int disjoint_set_size);
+    double evaluateError(int* offset_P, int* nns_P, double* val_P, double* Y, int N, int no_dims, double theta, int disjoint_set_size);
     void zeroMean(double* X, int N, int D);
-    void computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P, double** _val_P, double perplexity, int K, int verbose);
+    void computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P, double** _val_P, double perplexity, int K, int verbose, int disjoint_set_size);
     double randn();
 };
 

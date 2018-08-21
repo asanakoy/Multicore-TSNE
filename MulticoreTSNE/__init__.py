@@ -24,7 +24,7 @@ class FuncThread(threading.Thread):
 
 class MulticoreTSNE:
     """
-    Compute t-SNE embedding using Barnes-Hut optimization and
+    Compute t-SNE embedding using Barnes-Hut optimizatirandom_stateon and
     multiple cores (if available).
 
     Parameters mostly correspond to parameters of `sklearn.manifold.TSNE`.
@@ -35,6 +35,10 @@ class MulticoreTSNE:
     * method
 
     Args:
+    disjoint_set_size (default=0): if > 0 than dataset is splited on 2 parts: X[:disjoint_set_size] and X[disjoint_set_size:].
+                                   Distances between points from different sets are ignored in the loss function.
+                                   Can be used only with metric="precomputed".
+
     metric: which metric to use to build VPTree
         - euclidean
         - sqequclidean: usually leads to the same quality as euqclidean, but much faster.
@@ -53,6 +57,7 @@ class MulticoreTSNE:
     def __init__(self,
                  n_components=2,
                  perplexity=30.0,
+                 disjoint_set_size=0,
                  early_exaggeration=12,
                  learning_rate=200,
                  n_iter=1000,
@@ -71,6 +76,7 @@ class MulticoreTSNE:
         self.angle = angle
         self.should_normalize_input = should_normalize_input
         self.perplexity = perplexity
+        self.disjoint_set_size = disjoint_set_size
         self.early_exaggeration = early_exaggeration
         self.learning_rate = learning_rate
         self.n_iter = n_iter
@@ -85,7 +91,13 @@ class MulticoreTSNE:
         self.verbose = int(verbose)
         if early_exaggeration <= 0:
             raise ValueError('early_exaggeration must be > 0')
+        if disjoint_set_size < 0:
+            raise ValueError('disjoint_set_size must be >= 0')
+
         assert method == 'barnes_hut', 'Only Barnes-Hut method is allowed'
+        if disjoint_set_size > 0 and metric != 'precomputed':
+            raise ValueError('Disjoint sets are allowed only for metric="precomputed"')
+
         assert isinstance(init, np.ndarray) or init == 'random', "init must be 'random' or array"
         if isinstance(init, np.ndarray):
             assert init.ndim == 2, "init array must be 2D"
@@ -105,6 +117,7 @@ class MulticoreTSNE:
         self.ffi.cdef(
             """void tsne_run_double(double* X, int N, int D, double* Y,
                                     int no_dims, double perplexity, double theta,
+                                    int disjoint_set_size,
                                     int num_threads, int max_iter, int random_state,
                                     bool init_from_Y, double* lr_mult, int verbose,
                                     double early_exaggeration, double learning_rate,
@@ -131,6 +144,16 @@ class MulticoreTSNE:
                              '{} != {}'.format(len(self.lr_mult), len(X)))
 
         assert X.ndim == 2, 'X should be 2D array.'
+
+        number_nns_to_consider = int(3 * self.perplexity)
+        if number_nns_to_consider > len(X) - 1:
+            raise ValueError('too large perplexity ({}) for size of the dataset {}'.format(self.perplexity, len(X)))
+        if self.disjoint_set_size and \
+                (number_nns_to_consider > self.disjoint_set_size - 1 or (number_nns_to_consider > len(X) - self.disjoint_set_size - 1)):
+            raise ValueError('too large perplexity({}) for disjoint_set_size({}, {})'.format(self.perplexity,
+                                                                                             self.disjoint_set_size,
+                                                                                             len(X) - self.disjoint_set_size))
+
 
         if self.metric.endswith('_prenormed') and not self.metric.endswith('time_prenormed'):
             norms = (X**2).sum(axis=1)
@@ -163,7 +186,9 @@ class MulticoreTSNE:
         t = FuncThread(self.C.tsne_run_double,
                        cffi_X, N, D,
                        cffi_Y, self.n_components,
-                       self.perplexity, self.angle, self.n_jobs, self.n_iter, self.random_state,
+                       self.perplexity, self.angle,
+                       self.disjoint_set_size,
+                       self.n_jobs, self.n_iter, self.random_state,
                        init_from_Y, cffi_lr_mult, self.verbose, self.early_exaggeration,
                        self.learning_rate,
                        cffi_final_error, cffi_metric, self.should_normalize_input)
