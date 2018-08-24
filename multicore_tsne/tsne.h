@@ -15,6 +15,8 @@
 #define TSNE_H
 
 #include <string>
+#include <vector>
+#include <utility>
 
 static inline double sign(double x) { return (x == .0 ? .0 : (x < .0 ? -1.0 : 1.0)); }
 
@@ -37,13 +39,18 @@ public:
                int num_threads = 1, int max_iter = 1000, int random_state = 0,
                bool init_from_Y = false, double* lr_mult = NULL, int verbose = 0,
                double early_exaggeration = 12, double learning_rate = 200,
-               double *final_error = NULL, bool should_normalize_input = true, int disjoint_set_size = 0);
+               double *final_error = NULL, double *final_pairs_error = NULL,
+               bool should_normalize_input = true, int disjoint_set_size = 0,
+               double contrib_cost_pairs = 0,
+               const std::vector<std::pair<int, int> >& pairs = std::vector<std::pair<int, int> >());
     void symmetrizeMatrix(int** offset_P, int** nns_P, double** val_P, int N);
 
 private:
     // Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
     double computeGradient(int* inp_offset_P, int* inp_nns_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta, bool eval_error, int disjoint_set_size);
+    double computeGradientPairs(const std::vector<std::pair<int, int> >& pairs, const double* Y, int N, int no_dims, std::vector<double>& dC, bool eval_error);
     double evaluateError(int* offset_P, int* nns_P, double* val_P, double* Y, int N, int no_dims, double theta, int disjoint_set_size);
+    double evaluatePairsError(const std::vector<std::pair<int, int> >& pairs, const double* Y, int N, int no_dims);
     void zeroMean(double* X, int N, int D);
     void computeGaussianPerplexity(double* X, int N, int D, int** _offset_P, int** _nns_P, double** _val_P, double perplexity, int K, int verbose, int disjoint_set_size);
     double randn();

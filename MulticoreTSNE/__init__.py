@@ -38,6 +38,7 @@ class MulticoreTSNE:
     disjoint_set_size (default=0): if > 0 than dataset is splited on 2 parts: X[:disjoint_set_size] and X[disjoint_set_size:].
                                    Distances between points from different sets are ignored in the loss function.
                                    Can be used only with metric="precomputed".
+    contrib_cost_pairs (default=0):
 
     metric: which metric to use to build VPTree
         - euclidean
@@ -71,10 +72,12 @@ class MulticoreTSNE:
                  method='barnes_hut',
                  angle=0.5,
                  should_normalize_input=True,
+                 contrib_cost_pairs=0,
                  n_jobs=1):
         self.n_components = n_components
         self.angle = angle
         self.should_normalize_input = should_normalize_input
+        self.contrib_cost_pairs = contrib_cost_pairs
         self.perplexity = perplexity
         self.disjoint_set_size = disjoint_set_size
         self.early_exaggeration = early_exaggeration
@@ -88,6 +91,7 @@ class MulticoreTSNE:
         self.embedding_ = None
         self.n_iter_ = None
         self.kl_divergence_ = None
+        self.pairs_error = None
         self.verbose = int(verbose)
         if early_exaggeration <= 0:
             raise ValueError('early_exaggeration must be > 0')
@@ -121,8 +125,13 @@ class MulticoreTSNE:
                                     int num_threads, int max_iter, int random_state,
                                     bool init_from_Y, double* lr_mult, int verbose,
                                     double early_exaggeration, double learning_rate,
-                                    double *final_error, char* metric,
-                                    bool should_normalize_input);""")
+                                    double *final_error, 
+                                    double *final_pairs_error,
+                                    char* metric,
+                                    bool should_normalize_input,
+                                    double contrib_cost_pairs,
+                                    int* pairs,
+                                    int n_pairs);""")
 
         path = os.path.dirname(os.path.realpath(__file__))
         try:
@@ -133,11 +142,22 @@ class MulticoreTSNE:
             print(e)
             raise RuntimeError('Cannot find/open tsne_multicore shared library')
 
-    def fit(self, X, y=None):
-        self.fit_transform(X, y)
+    def fit(self, X, y=None, pairs=None):
+        self.fit_transform(X, y, pairs)
         return self
 
-    def fit_transform(self, X, _y=None):
+    def fit_transform(self, X, _y=None, pairs=None):
+        """
+
+        Args:
+            X:
+            _y:
+            pairs: list of pairs or [M x 2] array of indices of points that must be close
+                in the embedding space
+
+        Returns:
+
+        """
         if self.lr_mult is not None and len(self.lr_mult) != len(X):
             raise ValueError('lr_mult must be a double np.array '
                              'with the same number of elements as in X, '
@@ -174,7 +194,10 @@ class MulticoreTSNE:
         cffi_X = self.ffi.cast('double*', X.ctypes.data)
         cffi_Y = self.ffi.cast('double*', Y.ctypes.data)
         final_error = np.array(0, dtype=float)
+        final_pairs_error = np.array(0, dtype=float)
         cffi_final_error = self.ffi.cast('double*', final_error.ctypes.data)
+        cffi_final_pairs_error = self.ffi.cast('double*', final_pairs_error.ctypes.data)
+
         cffi_metric = self.ffi.new('char[]', self.metric.encode('ascii'))
 
         if self.lr_mult is not None:
@@ -182,6 +205,15 @@ class MulticoreTSNE:
             cffi_lr_mult = self.ffi.cast('double*', lr_mult.ctypes.data)
         else:
             cffi_lr_mult = self.ffi.cast('double*', 0)
+
+
+        if pairs is not None:
+            pairs = np.array(pairs, dtype=np.int32, order='C', copy=True)
+            cffi_pairs = self.ffi.cast('int*', pairs.ctypes.data)
+            n_pairs = len(pairs)
+        else:
+            cffi_pairs = self.ffi.cast('int*', 0)
+            n_pairs = 0
 
         t = FuncThread(self.C.tsne_run_double,
                        cffi_X, N, D,
@@ -191,7 +223,9 @@ class MulticoreTSNE:
                        self.n_jobs, self.n_iter, self.random_state,
                        init_from_Y, cffi_lr_mult, self.verbose, self.early_exaggeration,
                        self.learning_rate,
-                       cffi_final_error, cffi_metric, self.should_normalize_input)
+                       cffi_final_error, cffi_final_pairs_error,
+                       cffi_metric, self.should_normalize_input,
+                       self.contrib_cost_pairs, cffi_pairs, n_pairs)
         t.daemon = True
         t.start()
 
@@ -201,6 +235,7 @@ class MulticoreTSNE:
 
         self.embedding_ = Y
         self.kl_divergence_ = final_error
+        self.pairs_error = final_pairs_error
         self.n_iter_ = self.n_iter
 
         return Y

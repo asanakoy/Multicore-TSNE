@@ -20,6 +20,7 @@
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
+#include <utility>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -44,7 +45,12 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                int num_threads, int max_iter, int random_state,
                bool init_from_Y, double* lr_mult, int verbose,
                double early_exaggeration, double learning_rate,
-               double *final_error, bool should_normalize_input, int disjoint_set_size) {
+               double *final_error, double *final_pairs_error, bool should_normalize_input,
+               int disjoint_set_size,
+               double contrib_cost_pairs, const std::vector<std::pair<int, int> >& pairs) {
+    if (contrib_cost_pairs < 0) {
+        throw std::invalid_argument("contrib_cost_pairs multiplier cannot be < 0!");
+    }
     if (early_exaggeration <= 0) {
         throw std::invalid_argument("early_exaggeration multiplier cannot be <= 0!");
     }
@@ -80,9 +86,14 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     int stop_lying_iter = 250, mom_switch_iter = 250;
     double momentum = .5, final_momentum = .8;
     double eta = learning_rate;
+    bool force_compute_pairs_error = true && pairs.size() > 0;
 
     // Allocate some memory
     double* dY    = (double*) malloc(N * no_dims * sizeof(double));
+    std::vector<double> dY_pairs;
+    if (contrib_cost_pairs > 0 || force_compute_pairs_error) {
+        dY_pairs.assign(N * no_dims, 0.0);
+    }
     double* uY    = (double*) calloc(N * no_dims , sizeof(double));
     // The learning rate η is initially set to 100 and it is updated after every
     // iteration by means of the adaptive learning rate scheme described by
@@ -179,14 +190,40 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         }
     }
 
+     if (pairs.size() > 0)
+        contrib_cost_pairs *= (float)(N) / pairs.size();
+
     // Perform main training loop
     start = time(0);
     for (int iter = 0; iter < max_iter; iter++) {
 
-        bool need_eval_error = (verbose && ((iter > 0 && iter % 50 == 0) || (iter == max_iter - 1)));
+        bool need_eval_error = (verbose && ((iter >= 0 && iter % 50 == 0) || (iter == max_iter - 1)));
 
         // Compute approximate gradient
-        double error = computeGradient(offset_P, nns_P, val_P, Y, N, no_dims, dY, theta, need_eval_error, disjoint_set_size);
+        double tsne_error = computeGradient(offset_P, nns_P, val_P, Y, N, no_dims, dY, theta, need_eval_error, disjoint_set_size);
+        if (need_eval_error && verbose >= 100) {
+            auto result = std::minmax_element(dY, dY + N * no_dims);
+            fprintf(stderr, "Min, max dY:      \t(%f, %f)\n", *result.first, *result.second);
+        }
+
+        double pairs_error = -1.0;
+        if (contrib_cost_pairs > 0) {
+            pairs_error = computeGradientPairs(pairs, Y, N, no_dims, dY_pairs, need_eval_error);
+
+            for (int i = 0; i < N * no_dims; ++i) {
+                dY[i] += contrib_cost_pairs * dY_pairs[i];
+            }
+            if (need_eval_error && verbose >= 100) {
+                auto result = std::minmax_element(dY_pairs.begin(), dY_pairs.end());
+                fprintf(stderr, "Min, max dY_pairs:\t(%f, %f)\n", contrib_cost_pairs * *result.first, contrib_cost_pairs * *result.second);
+            }
+        } else if (force_compute_pairs_error) {
+            pairs_error = evaluatePairsError(pairs, Y, N, no_dims);
+            if (need_eval_error && verbose >= 100) {
+                auto result = std::minmax_element(dY_pairs.begin(), dY_pairs.end());
+                fprintf(stderr, "Min, max dY_pairs:\t(%f, %f)\n", contrib_cost_pairs * *result.first, contrib_cost_pairs * *result.second);
+            }
+        }
 
         for (int i = 0; i < N * no_dims; ++i) {
             int point_idx = i / no_dims;
@@ -194,6 +231,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                 // The point i frozen. No need to update it.
                 continue;
             }
+
             // Update gains
             // If the sign of the gradient w.r.t. a parameter doesn't change,
             // we slowly increase the learning rate for that parameter.
@@ -223,12 +261,12 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
         if (need_eval_error) {
             end = time(0);
 
-            if (iter == 0)
-                fprintf(stderr, "Iteration %d: error is %f\n", iter + 1, error);
-            else {
-                total_time += (float) (end - start);
-                fprintf(stderr, "Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter + 1, error, (float) (end - start) );
+            total_time += (float)(end - start);
+            fprintf(stderr, "Iteration %d: tsne_error is %f (50 iterations in %4.2f seconds)\n", iter + 1, tsne_error, (float)(end - start));
+            if (contrib_cost_pairs > 0 || force_compute_pairs_error) {
+                fprintf(stderr, "Iteration %d: pairs_error is %f\n", iter + 1, pairs_error);
             }
+
             start = time(0);
         }
 
@@ -237,6 +275,9 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 
     if (final_error != NULL)
         *final_error = evaluateError(offset_P, nns_P, val_P, Y, N, no_dims, theta, disjoint_set_size);
+     if (final_pairs_error != NULL) {
+         *final_pairs_error = evaluatePairsError(pairs, Y, N, no_dims);
+     }
 
     // Clean up memory
     free(dY);
@@ -350,6 +391,37 @@ computeGradient(int* inp_row_P, int* inp_nns_P, double* inp_val_P,
 }
 
 
+/* Compute gradient of the contrastive loss function for pairs
+
+
+ */
+template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
+double TSNE<treeT, dist_fn>::
+computeGradientPairs(const std::vector<std::pair<int, int> >& pairs,
+                     const double* Y, int N, int no_dims, std::vector<double>& dC, bool eval_error) {
+    double C = 0.;
+    std::fill(dC.begin(), dC.end(), 0.0);
+
+    // cannot parallelize if mapping is not 1 to 1.
+    for(auto it = pairs.begin(); it != pairs.end(); ++it) {
+        int ind1 = it->first * no_dims; // i
+        int ind2 = it->second * no_dims; // j
+
+        for (int k = 0; k < no_dims; ++k) {
+            double diff = Y[ind1 + k] - Y[ind2 + k]; // y_ik - y_jk
+            dC[ind1 + k] += diff; // dC/dy_ik
+            dC[ind2 + k] += -diff;// dC/dy_jk
+
+            if (eval_error) {
+                C += Y[ind1 + k] * Y[ind1 + k] + Y[ind2 + k] * Y[ind2 + k] - 2 * Y[ind1 + k] * Y[ind2 + k];
+            }
+        }
+    }
+    C *= 0.5;
+    return C;
+}
+
+
 // Evaluate t-SNE cost function (approximately)
 template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
 double TSNE<treeT, dist_fn>::evaluateError(int* offset_P, int* nns_P, double* val_P, double* Y, int N, int no_dims, double theta, int disjoint_set_size)
@@ -393,6 +465,30 @@ double TSNE<treeT, dist_fn>::evaluateError(int* offset_P, int* nns_P, double* va
     
     return C;
 }
+
+
+template <class treeT, double (*dist_fn)( const DataPoint&, const DataPoint&)>
+double TSNE<treeT, dist_fn>::
+evaluatePairsError(const std::vector<std::pair<int, int> >& pairs,
+                   const double* Y, int N, int no_dims) {
+    double C = 0.;
+
+#ifdef _OPENMP
+    #pragma omp parallel for reduction(+:C)
+#endif
+    for(int i = 0; i < pairs.size(); ++i) {
+        int ind1 = pairs[i].first * no_dims; // i
+        int ind2 = pairs[i].second * no_dims; // j
+
+        for (int k = 0; k < no_dims; ++k) {
+            C += (Y[ind1 + k] * Y[ind1 + k] + Y[ind2 + k] * Y[ind2 + k] - 2 * Y[ind1 + k] * Y[ind2 + k]);
+        }
+    }
+    C *= 0.5;
+    return C;
+}
+
+
 
 /*  Compute input similarities with a fixed perplexity using ball trees
    (this function allocates memory another function should free).
@@ -822,8 +918,11 @@ extern "C"
                                 double early_exaggeration = 12,
                                 double learning_rate = 200,
                                 double *final_error = NULL,
+                                double *final_pairs_error = NULL,
                                 const char* metric = "sqeuclidean",
-                                bool should_normalize_input = true) {
+                                bool should_normalize_input = true,
+                                double contrib_cost_pairs = 0.0,
+                                int* pairs = NULL, int n_pairs = 0) {
 
         if (verbose)
             fprintf(stderr, "Performing t-SNE using %d cores.\n", NUM_THREADS(num_threads));
@@ -838,41 +937,57 @@ extern "C"
             throw std::invalid_argument(std::string("received invalid metric name:") + str_metric);
         }
 
+        std::vector<std::pair<int, int> > pairs_vec;
+        if (pairs != NULL && n_pairs != 0) {
+            pairs_vec.assign(n_pairs, std::pair<int, int>(-1, -1));
+            for (int i = 0; i < n_pairs; ++i) {
+                pairs_vec[i].first = pairs[i * 2];
+                pairs_vec[i].second = pairs[i * 2 + 1];
+            }
+        }
+
         if (str_metric == "precomputed") {
             TSNE<SplitTree, precomputed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "euclidean") {
             TSNE<SplitTree, euclidean_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "sqeuclidean") {
             TSNE<SplitTree, euclidean_distance_squared> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "cosine") {
             TSNE<SplitTree, cosine_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "cosine_prenormed") {
             TSNE<SplitTree, cosine_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "angular") {
             TSNE<SplitTree, angular_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "angular_prenormed") {
             TSNE<SplitTree, angular_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "angular_time_prenormed") {
             // Experimental metric. Use on your own risk.
             const int margin = 20;
@@ -883,12 +998,14 @@ extern "C"
             TSNE<SplitTree, angular_distance_time_prenormed<margin, slope, max_time_distance> > tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "angular_threshold_prenormed") {
              TSNE<SplitTree, angular_threshold_prenormed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
-                     final_error, should_normalize_input, disjoint_set_size);
+                     final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
+                     contrib_cost_pairs, pairs_vec);
         }
     }
 }
