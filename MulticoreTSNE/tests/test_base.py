@@ -23,10 +23,11 @@ def pdist(X):
 class TestMulticoreTSNE(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.Xy = make_blobs(20, 100, 2, shuffle=False)
+        cls.Xy = make_blobs(91, 100, 2, shuffle=False)
+        cls.Xy_small = make_blobs(20, 100, 2, shuffle=False)
 
     def test_tsne(self):
-        X, y = self.Xy
+        X, y = self.Xy_small
         tsne = MulticoreTSNE(perplexity=5, n_iter=500)
         E = tsne.fit_transform(X)
 
@@ -46,13 +47,13 @@ class TestMulticoreTSNE(unittest.TestCase):
 
     def test_perplexity(self):
         X, y = self.Xy
-        tsne = MulticoreTSNE(perplexity=X.shape[0], n_iter=100)
+        tsne = MulticoreTSNE(perplexity=X.shape[0] // 3 - 1, n_iter=100)
         tsne.fit_transform(X)
 
     def test_dont_change_x(self):
         X = np.random.random((20, 4))
         X_orig = X.copy()
-        MulticoreTSNE(n_iter=400).fit_transform(X)
+        MulticoreTSNE(n_iter=400, perplexity=6).fit_transform(X)
         np.testing.assert_array_equal(X, X_orig)
 
     def test_init_from_y(self):
@@ -98,7 +99,7 @@ class TestMulticoreTSNE(unittest.TestCase):
 
     @data('euclidean', 'sqeuclidean', 'cosine', 'angular', 'precomputed')
     def test_metric(self, metric):
-        X, y = self.Xy
+        X, y = self.Xy_small
         tsne = MulticoreTSNE(perplexity=5, n_iter=500, metric=metric)
         if metric == 'precomputed':
             dist_matrix = pairwise_distances(X, metric='euclidean')
@@ -114,6 +115,17 @@ class TestMulticoreTSNE(unittest.TestCase):
                                               E[y == 1]).min()
 
         self.assertGreater(min_intercluster, max_intracluster)
+
+    def test_pairs(self):
+        X, y = self.Xy
+        N_ITER = 400
+        tsne = MulticoreTSNE(n_iter=N_ITER, contrib_cost_pairs=0.0001, n_jobs=1, verbose=100)
+        E = tsne.fit_transform(X, y, pairs=np.array([[1, 60], [3, 85], [10, 80]]))
+        print 'tsne.kl_divergence_', tsne.kl_divergence_
+
+        self.assertIs(tsne.embedding_, E)
+        self.assertGreater(tsne.kl_divergence_, 0)
+        self.assertEqual(tsne.n_iter_, N_ITER)
 
 
 if __name__ == '__main__':
