@@ -234,8 +234,8 @@ class MulticoreTSNE:
             sys.stdout.flush()
 
         self.embedding_ = Y
-        self.kl_divergence_ = final_error
-        self.pairs_error = final_pairs_error
+        self.kl_divergence_ = final_error.item()
+        self.pairs_error = final_pairs_error.item()
         self.n_iter_ = self.n_iter
 
         return Y

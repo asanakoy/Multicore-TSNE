@@ -1,3 +1,4 @@
+from __future__ import print_function
 from ddt import ddt, data
 import unittest
 from functools import partial
@@ -121,10 +122,12 @@ class TestMulticoreTSNE(unittest.TestCase):
         N_ITER = 400
         tsne = MulticoreTSNE(n_iter=N_ITER, contrib_cost_pairs=0.0001, n_jobs=1, verbose=100)
         E = tsne.fit_transform(X, y, pairs=np.array([[1, 60], [3, 85], [10, 80]]))
-        print 'tsne.kl_divergence_', tsne.kl_divergence_
+        print('kl_divergence_', tsne.kl_divergence_)
+        print('pairs_error', tsne.pairs_error)
 
         self.assertIs(tsne.embedding_, E)
         self.assertGreater(tsne.kl_divergence_, 0)
+        self.assertGreater(tsne.pairs_error, 0)
         self.assertEqual(tsne.n_iter_, N_ITER)
 
 
