@@ -45,6 +45,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
                int num_threads, int max_iter, int random_state,
                bool init_from_Y, double* lr_mult, int verbose,
                double early_exaggeration, double learning_rate,
+               double init_momentum, double final_momentum,
                double *final_error, double *final_pairs_error, bool should_normalize_input,
                int disjoint_set_size,
                double contrib_cost_pairs, const std::vector<std::pair<int, int> >& pairs) {
@@ -84,7 +85,7 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
     float total_time = .0;
     time_t start, end;
     int stop_lying_iter = 250, mom_switch_iter = 250;
-    double momentum = .5, final_momentum = .8;
+    double momentum = init_momentum;
     double eta = learning_rate;
     bool force_compute_pairs_error = true && pairs.size() > 0;
 
@@ -917,6 +918,8 @@ extern "C"
                                 int verbose = 0,
                                 double early_exaggeration = 12,
                                 double learning_rate = 200,
+                                double init_momentum = 0.5,
+                                double final_momentum = 0.8,
                                 double *final_error = NULL,
                                 double *final_pairs_error = NULL,
                                 const char* metric = "sqeuclidean",
@@ -950,42 +953,49 @@ extern "C"
             TSNE<SplitTree, precomputed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "euclidean") {
             TSNE<SplitTree, euclidean_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "sqeuclidean") {
             TSNE<SplitTree, euclidean_distance_squared> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "cosine") {
             TSNE<SplitTree, cosine_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "cosine_prenormed") {
             TSNE<SplitTree, cosine_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "angular") {
             TSNE<SplitTree, angular_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "angular_prenormed") {
             TSNE<SplitTree, angular_distance_prenormed> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "angular_time_prenormed") {
@@ -998,12 +1008,14 @@ extern "C"
             TSNE<SplitTree, angular_distance_time_prenormed<margin, slope, max_time_distance> > tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         } else if (str_metric == "angular_threshold_prenormed") {
              TSNE<SplitTree, angular_threshold_prenormed_distance> tsne;
             tsne.run(X, N, D, Y, no_dims, perplexity, theta, num_threads, max_iter, random_state,
                      init_from_Y, lr_mult, verbose, early_exaggeration, learning_rate,
+                     init_momentum, final_momentum,
                      final_error, final_pairs_error, should_normalize_input, disjoint_set_size,
                      contrib_cost_pairs, pairs_vec);
         }

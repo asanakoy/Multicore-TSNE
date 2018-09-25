@@ -35,6 +35,8 @@ class MulticoreTSNE:
     * method
 
     Args:
+    init_momentum (default=0.5): momentum value for the first 250 iter
+    final_momentum (default=0.8): momentum value after 250 iter
     disjoint_set_size (default=0): if > 0 than dataset is splited on 2 parts: X[:disjoint_set_size] and X[disjoint_set_size:].
                                    Distances between points from different sets are ignored in the loss function.
                                    Can be used only with metric="precomputed".
@@ -61,6 +63,8 @@ class MulticoreTSNE:
                  disjoint_set_size=0,
                  early_exaggeration=12,
                  learning_rate=200,
+                 init_momentum = 0.5,
+                 final_momentum = 0.8,
                  n_iter=1000,
                  n_iter_without_progress=30,
                  min_grad_norm=1e-07,
@@ -82,6 +86,8 @@ class MulticoreTSNE:
         self.disjoint_set_size = disjoint_set_size
         self.early_exaggeration = early_exaggeration
         self.learning_rate = learning_rate
+        self.init_momentum = init_momentum
+        self.final_momentum = final_momentum
         self.n_iter = n_iter
         self.n_jobs = n_jobs
         self.random_state = -1 if random_state is None else random_state
@@ -97,6 +103,10 @@ class MulticoreTSNE:
             raise ValueError('early_exaggeration must be > 0')
         if disjoint_set_size < 0:
             raise ValueError('disjoint_set_size must be >= 0')
+        if self.init_momentum <= 0:
+            raise ValueError('init_momentum must be > 0')
+        if self.final_momentum <= 0:
+            raise ValueError('final_momentum must be > 0')
 
         assert method == 'barnes_hut', 'Only Barnes-Hut method is allowed'
         if disjoint_set_size > 0 and metric != 'precomputed':
@@ -125,6 +135,8 @@ class MulticoreTSNE:
                                     int num_threads, int max_iter, int random_state,
                                     bool init_from_Y, double* lr_mult, int verbose,
                                     double early_exaggeration, double learning_rate,
+                                    double init_momentum,
+                                    double final_momentum,
                                     double *final_error, 
                                     double *final_pairs_error,
                                     char* metric,
@@ -223,6 +235,8 @@ class MulticoreTSNE:
                        self.n_jobs, self.n_iter, self.random_state,
                        init_from_Y, cffi_lr_mult, self.verbose, self.early_exaggeration,
                        self.learning_rate,
+                       self.init_momentum,
+                       self.final_momentum,
                        cffi_final_error, cffi_final_pairs_error,
                        cffi_metric, self.should_normalize_input,
                        self.contrib_cost_pairs, cffi_pairs, n_pairs)

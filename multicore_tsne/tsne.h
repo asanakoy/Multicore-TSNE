@@ -33,12 +33,16 @@ public:
             Y - array of size [N, no_dims], to fill with the resultant embedding
             no_dims - target dimensionality
             should_normalize_input - make X zero mean and divide each element by the overall maximum value.
+
+            init_momentum - initial momentum value (for the first 250 iterations)
+            final_momentum - momentum value after 250 iterations
     */
     void run(double* X, int N, int D, double* Y,
                int no_dims = 2, double perplexity = 30, double theta = .5,
                int num_threads = 1, int max_iter = 1000, int random_state = 0,
                bool init_from_Y = false, double* lr_mult = NULL, int verbose = 0,
                double early_exaggeration = 12, double learning_rate = 200,
+               double init_momentum = 0.5, double final_momentum = 0.8,
                double *final_error = NULL, double *final_pairs_error = NULL,
                bool should_normalize_input = true, int disjoint_set_size = 0,
                double contrib_cost_pairs = 0,
