@@ -128,6 +128,7 @@ class TestMulticoreTSNE(unittest.TestCase):
         self.assertIs(tsne.embedding_, E)
         self.assertGreater(tsne.kl_divergence_, 0)
         self.assertGreater(tsne.pairs_error, 0)
+        self.assertLess(tsne.pairs_error, 1.0)
         self.assertEqual(tsne.n_iter_, N_ITER)
 
 
