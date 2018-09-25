@@ -3,4 +3,7 @@
 
 # cmake directories
 multicore_tsne/*/*
+build
+.pytest_cache
 .idea
+*.egg-info
