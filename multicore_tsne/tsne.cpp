@@ -393,6 +393,7 @@ computeGradient(int* inp_row_P, int* inp_nns_P, double* inp_val_P,
 
 
 /* Compute gradient of the contrastive loss function for pairs
+ * L(point1, point2) = sqeuclidean_dist(point1, point2)
 
 
  */
@@ -414,7 +415,7 @@ computeGradientPairs(const std::vector<std::pair<int, int> >& pairs,
             dC[ind2 + k] += -diff;// dC/dy_jk
 
             if (eval_error) {
-                C += Y[ind1 + k] * Y[ind1 + k] + Y[ind2 + k] * Y[ind2 + k] - 2 * Y[ind1 + k] * Y[ind2 + k];
+                C += diff**2;
             }
         }
     }
@@ -482,7 +483,7 @@ evaluatePairsError(const std::vector<std::pair<int, int> >& pairs,
         int ind2 = pairs[i].second * no_dims; // j
 
         for (int k = 0; k < no_dims; ++k) {
-            C += (Y[ind1 + k] * Y[ind1 + k] + Y[ind2 + k] * Y[ind2 + k] - 2 * Y[ind1 + k] * Y[ind2 + k]);
+            C += (Y[ind1 + k] - Y[ind2 + k])**2;
         }
     }
     C *= 0.5;
