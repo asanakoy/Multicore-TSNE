@@ -174,14 +174,14 @@ void TSNE<treeT, dist_fn>::run(double* X, int N, int D, double* Y,
 
     // Initialize solution (randomly), unless Y is already initialized
     if (init_from_Y) {
-        if (lr_mult_was_passed) {
-            // Immediately stop lying if nothing is frozen.
-            // Passed Y is close to the true solution.
-            fprintf(stderr, "No early exaggeration will be used because lr_mult was passed.");
-            stop_lying_iter = 0;
-        } else {
-            // do iteration with early exaggeration
-        }
+//        if (lr_mult_was_passed) {
+//            // Immediately stop lying if nothing is frozen.
+//            // Passed Y is close to the true solution.
+//            fprintf(stderr, "No early exaggeration will be used because lr_mult was passed.");
+//            stop_lying_iter = 0;
+//        } else {
+//            // do iteration with early exaggeration
+//        }
     } else {
         if (random_state != -1) {
             srand(random_state);
