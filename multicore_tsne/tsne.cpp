@@ -415,7 +415,7 @@ computeGradientPairs(const std::vector<std::pair<int, int> >& pairs,
             dC[ind2 + k] += -diff;// dC/dy_jk
 
             if (eval_error) {
-                C += diff**2;
+                C += diff * diff;
             }
         }
     }
@@ -483,7 +483,8 @@ evaluatePairsError(const std::vector<std::pair<int, int> >& pairs,
         int ind2 = pairs[i].second * no_dims; // j
 
         for (int k = 0; k < no_dims; ++k) {
-            C += (Y[ind1 + k] - Y[ind2 + k])**2;
+            double diff = Y[ind1 + k] - Y[ind2 + k]; // y_ik - y_jk
+            C += diff * diff;
         }
     }
     C *= 0.5;
